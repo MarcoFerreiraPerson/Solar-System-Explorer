@@ -7,7 +7,7 @@ namespace SolarSystemExplorer.Runtime
         [SerializeField] private Transform star;
         [SerializeField] private Transform planet;
         [SerializeField] private Light directionalLight;
-        [SerializeField] private bool invertLightForward = false;
+        [SerializeField] private bool invertLightForward = true;
 
         public void Initialize(Transform starTransform, Transform planetTransform, Light sunLight)
         {
@@ -21,6 +21,13 @@ namespace SolarSystemExplorer.Runtime
             if (star == null || planet == null || directionalLight == null)
             {
                 return;
+            }
+
+            if (!directionalLight.gameObject.activeInHierarchy || !directionalLight.enabled)
+            {
+                Debug.LogWarning($"[LightController] Light was disabled! Re-enabling...");
+                directionalLight.gameObject.SetActive(true);
+                directionalLight.enabled = true;
             }
 
             Vector3 starToPlanet = planet.position - star.position;

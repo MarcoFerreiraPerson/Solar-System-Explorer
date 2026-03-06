@@ -32,8 +32,14 @@ namespace SolarSystemExplorer.Runtime
             GameObject planet = FindOrCreatePlanet(star.transform);
             Light sun = FindOrCreateDirectionalSunLight();
             CreateLightController(bootstrapObject.transform, star.transform, planet.transform, sun);
+            sun.gameObject.SetActive(true);  // ADD THIS
+            sun.enabled = true;
+
             Camera mainCamera = ConfigureMainCamera();
             ConfigurePlayer(planet, mainCamera);
+
+            Debug.Log($"[END OF BOOTSTRAP] Sun active: {sun.gameObject.activeInHierarchy}, enabled: {sun.enabled}");
+
         }
 
         private static void DisableLegacy2DLighting()
@@ -48,7 +54,7 @@ namespace SolarSystemExplorer.Runtime
         private static void ConfigureEnvironmentLighting()
         {
             RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.025f, 0.025f, 0.035f);
+            RenderSettings.ambientLight = Color.black;
             RenderSettings.reflectionIntensity = 0f;
 
             if (RenderSettings.skybox != null)
@@ -240,6 +246,9 @@ namespace SolarSystemExplorer.Runtime
             lightComponent.intensity = 1.3f;
             lightComponent.shadows = LightShadows.Soft;
             lightComponent.shadowStrength = 0.85f;
+
+            lightComponent.gameObject.SetActive(true);
+            lightComponent.enabled = true;
         }
 
         private static void CreateLightController(Transform parent, Transform star, Transform planet, Light sun)
@@ -263,6 +272,9 @@ namespace SolarSystemExplorer.Runtime
             mainCamera.fieldOfView = 60f;
             mainCamera.nearClipPlane = 0.3f;
             mainCamera.farClipPlane = 50000f;
+
+            //mainCamera.clearFlags = CameraClearFlags.SolidColor;  // ADD THIS
+            //mainCamera.backgroundColor = Color.black;
 
             Transform cameraTransform = mainCamera.transform;
             cameraTransform.position = new Vector3(-2800f, 900f, -2800f);
