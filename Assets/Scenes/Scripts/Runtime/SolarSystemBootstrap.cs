@@ -7,10 +7,11 @@ namespace SolarSystemExplorer.Runtime
     {
         private const float StarDiameter = 600f;
         private const float OrbitGravityConstant = 1f;
-        private const float OrbitAttractorMass = 22000000f;
+        private const float OrbitAttractorMass = 2200000f;
 
         private Planet planet;
         private GameObject star;
+        private Player player;
 
         void Awake()
         {
@@ -19,8 +20,14 @@ namespace SolarSystemExplorer.Runtime
 
             star = CreateStar();
             planet = new Planet(star.transform, OrbitAttractorMass, OrbitGravityConstant);
+            player = new Player(planet);
             Light sunLight = CreateDirectionalSunLight();
             CreateLightController(transform, star.transform, planet.getPlanet().transform, sunLight);
+        }
+
+        void Update()
+        {
+            player.updatePlayer(planet, OrbitGravityConstant);
         }
 
         private void DisableLegacy2DLighting()

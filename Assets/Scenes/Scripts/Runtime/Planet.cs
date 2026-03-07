@@ -10,6 +10,8 @@ namespace SolarSystemExplorer.Runtime
         private const float OrbitMinRadius = 700f;
         private const float OrbitMaxRadius = 3600f;
         private const float OrbitMaxSpeed = 600f;
+        private const float planetMass = 2200000000f;
+        private const float minDistance = 600f;
 
         private GameObject planet;
 
@@ -17,6 +19,22 @@ namespace SolarSystemExplorer.Runtime
         {
             return planet;
         }
+
+        public float getPlanetDiamter()
+        {
+            return PlanetDiameter;
+        }
+
+        public float getMass()
+        {
+            return planetMass;
+        }
+
+        public float getMinDistance()
+        {
+            return minDistance;
+        }
+
         public Planet(Transform starTransform, float OrbitAttractorMass, float OrbitGravityConstant)
         {
             planet = GameObject.CreatePrimitive(PrimitiveType.Sphere);
