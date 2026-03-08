@@ -15,7 +15,11 @@ namespace SolarSystemExplorer.Runtime
         private const float OrbitMaxRadius = 3600f;
         private const float OrbitMaxSpeed = 600f;
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        public static void Initialize()
+        {
+            BuildRuntimeSlice();
+        }
+
         private static void BuildRuntimeSlice()
         {
             if (GameObject.Find(BootstrapObjectName) != null)
