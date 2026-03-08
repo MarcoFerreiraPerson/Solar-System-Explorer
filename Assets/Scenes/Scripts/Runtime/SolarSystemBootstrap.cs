@@ -12,6 +12,7 @@ namespace SolarSystemExplorer.Runtime
         private Planet planet;
         private GameObject star;
         private Player player;
+        private SpaceShip spaceShip;
 
         void Awake()
         {
@@ -21,12 +22,16 @@ namespace SolarSystemExplorer.Runtime
             star = CreateStar();
             planet = new Planet(star.transform, OrbitAttractorMass, OrbitGravityConstant);
             player = new Player(planet);
+            spaceShip = new SpaceShip(planet, player);
             Light sunLight = CreateDirectionalSunLight();
             CreateLightController(transform, star.transform, planet.getPlanet().transform, sunLight);
         }
 
         void Update()
         {
+            spaceShip.HandleBoarding();
+            spaceShip.HandleMouseLook();
+            spaceShip.spaceshipUpdate(planet, OrbitGravityConstant);
             player.updatePlayer(planet, OrbitGravityConstant);
         }
 

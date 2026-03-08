@@ -10,7 +10,6 @@ namespace SolarSystemExplorer.Runtime
 
         [SerializeField] private float movementSpeed = 8;
         [SerializeField] private float mass;
-        [SerializeField] private Vector3 position;
 
         private float mouseSensitivity = 0.2f;
         private float pitch = 0f;
@@ -21,17 +20,22 @@ namespace SolarSystemExplorer.Runtime
         Quaternion lastPlanetRotation;
         Camera mainCamera;
         private Vector3 velocity;
-        [SerializeField] private float maxSpeed = 6000f;
+        [SerializeField] private float maxSpeed = 50f;
 
         private GameObject player;
         // Start is called once before the first execution of Update after the MonoBehaviour is create
+        
+        public GameObject getPlayer()
+        {
+            return player; 
+        }
 
         public Player(Planet planet)
         {
             player = GameObject.CreatePrimitive(PrimitiveType.Capsule);
             mainCamera = Camera.main;
             mainCamera.transform.SetParent(player.transform);
-            mainCamera.transform.localPosition = new Vector3(0, 1.6f, 0);
+            mainCamera.transform.localPosition = new Vector3(0, 1f, 0);
             mainCamera.transform.localRotation = Quaternion.identity;
 
             Cursor.lockState = CursorLockMode.Locked;
@@ -40,7 +44,7 @@ namespace SolarSystemExplorer.Runtime
             startingPlanet = planet.getPlanet();
             lastPlanetCenterPos = startingPlanet.transform.position;
             lastPlanetRotation = startingPlanet.transform.rotation;
-            Vector3 playerStartingPos = startingPlanet.transform.position + player.transform.up * (planet.getPlanetDiamter() / 2f + (player.transform.localScale.y + 3) / 2f);
+            Vector3 playerStartingPos = startingPlanet.transform.position + player.transform.up * (planet.getPlanetDiameter() / 2f + (player.transform.localScale.y + 3) / 2f);
 
             player.transform.position = playerStartingPos;
         }
@@ -73,24 +77,10 @@ namespace SolarSystemExplorer.Runtime
             surfaceNormal = (playerPos - planetCenterPos).normalized;
 
 
-            float surfaceHeight = planet.getPlanetDiamter() / 2f + (player.transform.localScale.y + 1) / 2f;
+            float surfaceHeight = planet.getPlanetDiameter() / 2f + (player.transform.localScale.y + 1) / 2f;
 
             playerPos = planetCenterPos + surfaceNormal * surfaceHeight;
             player.transform.rotation = Quaternion.FromToRotation(player.transform.up, surfaceNormal) * player.transform.rotation;
-
-            //float attractorMass = planet.getMass();
-            //float minDistance = planet.getMinDistance();
-            //Vector3 acceleration = GravityModel.ComputeAcceleration(playerPos, planetTransform.position, Gconstant, attractorMass, minDistance);
-
-            //float dt = Time.fixedDeltaTime;
-
-            //velocity += acceleration * dt;
-            //if (velocity.sqrMagnitude > maxSpeed * maxSpeed)
-            //{
-            //    velocity = velocity.normalized * maxSpeed;
-            //}
-
-            //Vector3 nextPosition = playerPos + velocity * dt;
 
             player.transform.position = playerPos;
 

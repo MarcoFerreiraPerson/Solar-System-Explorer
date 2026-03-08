@@ -20,7 +20,7 @@ namespace SolarSystemExplorer.Runtime
             return planet;
         }
 
-        public float getPlanetDiamter()
+        public float getPlanetDiameter()
         {
             return PlanetDiameter;
         }
