@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -5,6 +6,15 @@ namespace SolarSystemExplorer.Runtime
 {
     public class FreeFlyCameraController : MonoBehaviour
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [DllImport("__Internal")]
+        private static extern float GetDevicePixelRatio();
+#else
+        private static float GetDevicePixelRatio() { return 1f; }
+#endif
+
+        private const float MaxMouseDelta = 50f;
+
         [Header("Translation")]
         [SerializeField] private float moveSpeed = 260f;
         [SerializeField] private float boostMultiplier = 4f;
@@ -20,6 +30,8 @@ namespace SolarSystemExplorer.Runtime
         private float yaw;
         private float pitch;
         private Vector3 currentVelocity;
+        private int skipFrames;
+        private CursorLockMode previousLockState;
 
         public void ConfigureLookMode(bool requireRmbToLook, bool lockCursorWhenLooking)
         {
@@ -36,6 +48,8 @@ namespace SolarSystemExplorer.Runtime
         {
             SyncRotationState();
             currentVelocity = Vector3.zero;
+            skipFrames = 2;
+            previousLockState = Cursor.lockState;
         }
 
         private void Update()
@@ -81,13 +95,24 @@ namespace SolarSystemExplorer.Runtime
 
             if (lockCursorWhileLooking)
             {
+                if (Cursor.lockState != CursorLockMode.Locked)
+                {
+                    skipFrames = 3;
+                }
                 Cursor.lockState = CursorLockMode.Locked;
                 Cursor.visible = false;
             }
 
+            if (skipFrames > 0)
+            {
+                skipFrames--;
+                return;
+            }
+
             Vector2 mouseDelta = mouse.delta.ReadValue();
-            float mouseX = mouseDelta.x;
-            float mouseY = mouseDelta.y;
+            float dpr = GetDevicePixelRatio();
+            float mouseX = Mathf.Clamp(mouseDelta.x / dpr, -MaxMouseDelta, MaxMouseDelta);
+            float mouseY = Mathf.Clamp(mouseDelta.y / dpr, -MaxMouseDelta, MaxMouseDelta);
 
             yaw += mouseX * lookSensitivity;
             pitch -= mouseY * lookSensitivity;

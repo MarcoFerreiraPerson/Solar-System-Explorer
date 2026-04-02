@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -5,6 +6,13 @@ namespace SolarSystemExplorer.Runtime
 {
     public class PlanetPlayerController : MonoBehaviour
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [DllImport("__Internal")]
+        private static extern float GetDevicePixelRatio();
+#else
+        private static float GetDevicePixelRatio() { return 1f; }
+#endif
+
         [Header("References")]
         [SerializeField] private Transform planet;
         [SerializeField] private Renderer surfaceRenderer;
@@ -36,11 +44,14 @@ namespace SolarSystemExplorer.Runtime
         private bool hasLocalPlanetCenter;
         private Collider surfaceCollider;
 
+        private const float MaxMouseDelta = 50f;
+
         private Vector3 planarVelocity;
         private float downwardSpeed;
         private float cameraPitch = 12f;
         private bool freeCamActive;
         private bool initialized;
+        private int skipFrames;
 
         private Vector3 previousPlanetPosition;
         private Quaternion previousPlanetRotation;
@@ -55,6 +66,7 @@ namespace SolarSystemExplorer.Runtime
             RecalculateSurfaceGeometry();
             SpawnOnPlanetSurface();
             SetFreeCamMode(false);
+            skipFrames = 3;
             initialized = true;
         }
 
@@ -88,6 +100,10 @@ namespace SolarSystemExplorer.Runtime
             HandleModeToggle();
             if (!freeCamActive && lockCursorInPlayerMode)
             {
+                if (Cursor.lockState != CursorLockMode.Locked)
+                {
+                    skipFrames = 3;
+                }
                 Cursor.lockState = CursorLockMode.Locked;
                 Cursor.visible = false;
             }
@@ -165,9 +181,19 @@ namespace SolarSystemExplorer.Runtime
                 return;
             }
 
+            if (skipFrames > 0)
+            {
+                skipFrames--;
+                RotateBody(up, 0f, deltaTime);
+                return;
+            }
+
             Vector2 delta = mouse.delta.ReadValue();
-            float yawDelta = delta.x * lookSensitivity;
-            cameraPitch = Mathf.Clamp(cameraPitch - (delta.y * lookSensitivity), minPitch, maxPitch);
+            float dpr = GetDevicePixelRatio();
+            float dx = Mathf.Clamp(delta.x / dpr, -MaxMouseDelta, MaxMouseDelta);
+            float dy = Mathf.Clamp(delta.y / dpr, -MaxMouseDelta, MaxMouseDelta);
+            float yawDelta = dx * lookSensitivity;
+            cameraPitch = Mathf.Clamp(cameraPitch - (dy * lookSensitivity), minPitch, maxPitch);
 
             RotateBody(up, yawDelta, deltaTime);
         }

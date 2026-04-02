@@ -95,12 +95,10 @@ namespace SolarSystemExplorer.Runtime
                 renderer.shadowCastingMode = ShadowCastingMode.Off;
                 renderer.receiveShadows = false;
 
-                Material starMaterial = CreateLitMaterial();
+                Material starMaterial = CreateUnlitMaterial();
                 if (starMaterial != null)
                 {
                     starMaterial.SetColor("_BaseColor", new Color(1f, 0.85f, 0.45f));
-                    starMaterial.SetColor("_EmissionColor", new Color(1f, 0.55f, 0.2f) * 2.2f);
-                    starMaterial.EnableKeyword("_EMISSION");
                     renderer.sharedMaterial = starMaterial;
                 }
             }
@@ -187,6 +185,17 @@ namespace SolarSystemExplorer.Runtime
             return shader == null ? null : new Material(shader);
         }
 
+        private static Material CreateUnlitMaterial()
+        {
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (shader == null)
+            {
+                shader = Shader.Find("Unlit/Color");
+            }
+
+            return shader == null ? null : new Material(shader);
+        }
+
         private static void ConfigurePlanetOrbit(ScaledNewtonianOrbit orbit, Transform starTransform)
         {
             if (orbit == null || starTransform == null)
@@ -268,6 +277,7 @@ namespace SolarSystemExplorer.Runtime
                 cameraObject.AddComponent<AudioListener>();
             }
 
+            mainCamera.clearFlags = CameraClearFlags.Skybox;
             mainCamera.orthographic = false;
             mainCamera.fieldOfView = 60f;
             mainCamera.nearClipPlane = 0.3f;
