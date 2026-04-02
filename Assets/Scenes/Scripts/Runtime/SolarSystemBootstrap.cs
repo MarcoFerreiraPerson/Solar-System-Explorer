@@ -69,12 +69,10 @@ namespace SolarSystemExplorer.Runtime
                 renderer.shadowCastingMode = ShadowCastingMode.Off;
                 renderer.receiveShadows = false;
 
-                Material starMaterial = CreateLitMaterial();
+                Material starMaterial = CreateUnlitMaterial();
                 if (starMaterial != null)
                 {
                     starMaterial.SetColor("_BaseColor", new Color(1f, 0.85f, 0.45f));
-                    starMaterial.SetColor("_EmissionColor", new Color(1f, 0.55f, 0.2f) * 2.2f);
-                    starMaterial.EnableKeyword("_EMISSION");
                     renderer.sharedMaterial = starMaterial;
                 }
             }
