@@ -3,7 +3,7 @@ using UnityEngine.Rendering;
 
 namespace SolarSystemExplorer.Runtime
 {
-    public class SolarSystemBootstrap: MonoBehaviour
+    public class SolarSystemBootstrap
     {
         private const float StarDiameter = 600f;
         private const float OrbitGravityConstant = 1f;
@@ -14,7 +14,7 @@ namespace SolarSystemExplorer.Runtime
         private Player player;
         private SpaceShip spaceShip;
 
-        void Awake()
+        public void initialize(Transform t)
         {
             DisableLegacy2DLighting();
             ConfigureEnvironmentLighting();
@@ -24,10 +24,10 @@ namespace SolarSystemExplorer.Runtime
             player = new Player(planet);
             spaceShip = new SpaceShip(planet, player);
             Light sunLight = CreateDirectionalSunLight();
-            CreateLightController(transform, star.transform, planet.getPlanet().transform, sunLight);
+            CreateLightController(t, star.transform, planet.getPlanet().transform, sunLight);
         }
 
-        void Update()
+        public void systemUpdate()
         {
             spaceShip.HandleBoarding();
             spaceShip.HandleMouseLook();
@@ -78,6 +78,17 @@ namespace SolarSystemExplorer.Runtime
             }
 
             return star;
+        }
+
+        private static Material CreateUnlitMaterial()
+        {
+            Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+            if (shader == null)
+            {
+                shader = Shader.Find("Unlit/Color");
+            }
+
+            return shader == null ? null : new Material(shader);
         }
 
         private static Material CreateLitMaterial()

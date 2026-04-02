@@ -11,12 +11,19 @@ public class SolarSystemInit : MonoBehaviour
 {
     [SerializeField] private string solarSystemSceneName = "SampleScene";
     InputSystem_Actions playerInput;
+    SolarSystemBootstrap solarSystemBootstrap;
 
     void Awake()
     {
         playerInput = new InputSystem_Actions();
+        solarSystemBootstrap = new SolarSystemBootstrap();
         Debug.Log(playerInput.Player.enabled);
-        SolarSystemBootstrap.Initialize();
+        solarSystemBootstrap.initialize(transform);
+    }
+
+    private void Update()
+    {
+        solarSystemBootstrap.systemUpdate();
     }
 
     private void OnEnable()

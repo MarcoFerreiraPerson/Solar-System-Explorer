@@ -19,8 +19,8 @@ namespace SolarSystemExplorer.Runtime
         Vector3 lastPlanetCenterPos;
         Quaternion lastPlanetRotation;
         Camera mainCamera;
-        private Vector3 velocity;
-        [SerializeField] private float maxSpeed = 50f;
+        //private Vector3 velocity;
+        //[SerializeField] private float maxSpeed = 50f;
 
         private GameObject player;
         // Start is called once before the first execution of Update after the MonoBehaviour is create
