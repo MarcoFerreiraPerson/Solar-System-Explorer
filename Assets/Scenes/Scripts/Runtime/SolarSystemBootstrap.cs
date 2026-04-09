@@ -32,7 +32,10 @@ namespace SolarSystemExplorer.Runtime
             spaceShip.HandleBoarding();
             spaceShip.HandleMouseLook();
             spaceShip.spaceshipUpdate(planet, OrbitGravityConstant);
-            player.updatePlayer(planet, OrbitGravityConstant);
+            spaceShip.UpdateCamera();
+
+            if (!spaceShip.IsBoarded)
+                player.updatePlayer(planet, OrbitGravityConstant);
         }
 
         private void DisableLegacy2DLighting()

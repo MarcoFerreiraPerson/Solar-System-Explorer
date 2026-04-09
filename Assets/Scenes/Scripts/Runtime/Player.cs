@@ -35,7 +35,7 @@ namespace SolarSystemExplorer.Runtime
             player = GameObject.CreatePrimitive(PrimitiveType.Capsule);
             mainCamera = Camera.main;
             mainCamera.transform.SetParent(player.transform);
-            mainCamera.transform.localPosition = new Vector3(0, 1f, 0);
+            mainCamera.transform.localPosition = new Vector3(0f, 1f, 0f);
             mainCamera.transform.localRotation = Quaternion.identity;
 
             Cursor.lockState = CursorLockMode.Locked;

@@ -222,9 +222,9 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.3
-  far clip plane: 1000
+  far clip plane: 100000
   field of view: 34
-  orthographic: 1
+  orthographic: 0
   orthographic size: 5
   m_Depth: -1
   m_CullingMask:
@@ -369,6 +369,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e63dcaae1004813aab4efdf04d4c29c4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SolarSystemInit
+  solarSystemSceneName: SampleScene
 --- !u!4 &966791345
 Transform:
   m_ObjectHideFlags: 0

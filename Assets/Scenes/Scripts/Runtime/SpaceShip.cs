@@ -30,7 +30,10 @@ namespace SolarSystemExplorer.Runtime
         private Vector3 lastPlanetPos;
         private Quaternion lastPlanetRot;
 
-        private GameObject camAnchor;
+        private float camFollowDistance = 15f;
+        private float camFollowHeight = 3f;
+
+        public bool IsBoarded => isBoarded;
 
         public SpaceShip(Planet planet, Player player)
         {
@@ -50,20 +53,25 @@ namespace SolarSystemExplorer.Runtime
             lastPlanetPos = pt.position;
             lastPlanetRot = pt.rotation;
 
-            camAnchor = new GameObject("CamAnchor");
-            camAnchor.transform.SetParent(spaceShip.transform, false);
-            camAnchor.transform.localPosition = Vector3.zero;
-            camAnchor.transform.localRotation = Quaternion.identity;
-            camAnchor.transform.localScale = new Vector3(
-                1f / spaceShip.transform.localScale.x,
-                1f / spaceShip.transform.localScale.y,
-                1f / spaceShip.transform.localScale.z);
-
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
         }
 
         public int getState() => state;
+
+        public void UpdateCamera()
+        {
+            if (!isBoarded) return;
+
+            Vector3 desiredPos = spaceShip.transform.position
+                + spaceShip.transform.forward * camFollowDistance
+                + spaceShip.transform.up * camFollowHeight;
+
+            mainCamera.transform.position = desiredPos;
+            mainCamera.transform.rotation = Quaternion.LookRotation(
+                -spaceShip.transform.forward,
+                spaceShip.transform.up);
+        }
 
         public void spaceshipUpdate(Planet planet, float Gconstant)
         {
@@ -136,10 +144,10 @@ namespace SolarSystemExplorer.Runtime
 
             if (isBoarded)
             {
-                if (Keyboard.current.wKey.isPressed) { thrust += spaceShip.transform.forward; thrusting = true; }
-                if (Keyboard.current.sKey.isPressed) { thrust -= spaceShip.transform.forward; thrusting = true; }
-                if (Keyboard.current.aKey.isPressed) { thrust -= spaceShip.transform.right; thrusting = true; }
-                if (Keyboard.current.dKey.isPressed) { thrust += spaceShip.transform.right; thrusting = true; }
+                if (Keyboard.current.wKey.isPressed) { thrust -= spaceShip.transform.forward; thrusting = true; }
+                if (Keyboard.current.sKey.isPressed) { thrust += spaceShip.transform.forward; thrusting = true; }
+                if (Keyboard.current.aKey.isPressed) { thrust += spaceShip.transform.right; thrusting = true; }
+                if (Keyboard.current.dKey.isPressed) { thrust -= spaceShip.transform.right; thrusting = true; }
                 if (Keyboard.current.spaceKey.isPressed) { thrust += spaceShip.transform.up; thrusting = true; }
                 if (Keyboard.current.leftCtrlKey.isPressed) { thrust -= spaceShip.transform.up; thrusting = true; }
 
@@ -177,12 +185,12 @@ namespace SolarSystemExplorer.Runtime
             if (state == 0)
             {
                 Vector3 surfaceNormal = (spaceShip.transform.position - startingPlanet.transform.position).normalized;
-                spaceShip.transform.Rotate(surfaceNormal, delta.x * mouseSensitivity, Space.World);
+                    spaceShip.transform.Rotate(surfaceNormal, delta.x * mouseSensitivity, Space.World);
             }
             else
             {
                 spaceShip.transform.Rotate(Vector3.up, delta.x * mouseSensitivity, Space.Self);
-                spaceShip.transform.Rotate(Vector3.right, -delta.y * mouseSensitivity, Space.Self);
+                spaceShip.transform.Rotate(Vector3.right, delta.y * mouseSensitivity, Space.Self);
             }
         }
 
@@ -199,9 +207,7 @@ namespace SolarSystemExplorer.Runtime
                 isBoarded = true;
                 player.getPlayer().GetComponent<MeshRenderer>().enabled = false;
 
-                mainCamera.transform.SetParent(camAnchor.transform);
-                mainCamera.transform.localPosition = new Vector3(0f, 2f, -8f);
-                mainCamera.transform.localRotation = Quaternion.identity;
+                mainCamera.transform.SetParent(null);
 
                 Cursor.lockState = CursorLockMode.Locked;
                 Cursor.visible = false;
