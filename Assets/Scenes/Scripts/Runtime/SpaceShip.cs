@@ -26,6 +26,8 @@ namespace SolarSystemExplorer.Runtime
 
         private float launchLockTimer = 0f;
         private float launchLockDuration = 2.5f;
+        private float shipSurfaceClearance = 0.35f;
+        private float launchVelocity = 20f;
 
         private Vector3 lastPlanetPos;
         private Quaternion lastPlanetRot;
@@ -40,6 +42,10 @@ namespace SolarSystemExplorer.Runtime
             GameObject prefab = Resources.Load<GameObject>("Prefabs/Spaceship");
             this.player = player;
             spaceShip = GameObject.Instantiate(prefab);
+            // Put the ship (and all its children) on Ignore Raycast (layer 2) so
+            // landing/collision raycasts don't hit the ship's own colliders before
+            // the planet terrain.
+            SetLayerRecursively(spaceShip, 2);
             mainCamera = Camera.main;
             startingPlanet = planet.getPlanet();
 
@@ -58,6 +64,16 @@ namespace SolarSystemExplorer.Runtime
         }
 
         public int getState() => state;
+
+        private static void SetLayerRecursively(GameObject obj, int layer)
+        {
+            if (obj == null) return;
+            obj.layer = layer;
+            foreach (Transform child in obj.transform)
+            {
+                SetLayerRecursively(child.gameObject, layer);
+            }
+        }
 
         public void UpdateCamera()
         {
@@ -92,8 +108,22 @@ namespace SolarSystemExplorer.Runtime
                 return;
             }
 
+            // Altitude above the actual (displaced) terrain, not the nominal sphere.
+            // Raycast from the ship toward the planet center; altitude is the distance
+            // traveled before hitting terrain. Fall back to sphere-based if the raycast
+            // misses (first frame before collider exists, or ship is below surface).
             Vector3 toShip = spaceShip.transform.position - startingPlanet.transform.position;
-            float altitude = toShip.magnitude - planet.getPlanetDiameter() / 2f;
+            Vector3 shipDown = -toShip.normalized;
+            float planetDiameter = planet.getPlanetDiameter();
+            float altitude;
+            if (Physics.Raycast(spaceShip.transform.position, shipDown, out RaycastHit altHit, planetDiameter))
+            {
+                altitude = altHit.distance - spaceShip.transform.localScale.y / 2f;
+            }
+            else
+            {
+                altitude = toShip.magnitude - planetDiameter / 2f;
+            }
 
             if (altitude <= landedThreshold)
                 state = 0;
@@ -107,7 +137,7 @@ namespace SolarSystemExplorer.Runtime
             {
                 state = 1;
                 launchLockTimer = launchLockDuration;
-                velocity = spaceShip.transform.up * 5f;
+                velocity = spaceShip.transform.up * launchVelocity;
 
                 lastPlanetPos = startingPlanet.transform.position;
                 lastPlanetRot = startingPlanet.transform.rotation;
@@ -125,10 +155,27 @@ namespace SolarSystemExplorer.Runtime
             spaceShip.transform.position = pt.position + offset;
             spaceShip.transform.rotation = rotDelta * spaceShip.transform.rotation;
 
-            Vector3 surfaceNormal = (spaceShip.transform.position - pt.position).normalized;
-            float snapRadius = planet.getPlanetDiameter() / 2f + (spaceShip.transform.localScale.y + 1f) / 2f;
-            spaceShip.transform.position = pt.position + surfaceNormal * snapRadius;
-            spaceShip.transform.rotation = Quaternion.FromToRotation(spaceShip.transform.up, surfaceNormal) * spaceShip.transform.rotation;
+            // Raycast-based landing snap. Cast from well above the peak toward the planet
+            // center to find the actual terrain, then sit on it oriented to the local
+            // surface normal. Fall back to sphere snap if the collider isn't ready.
+            Vector3 radialNormal = (spaceShip.transform.position - pt.position).normalized;
+            float shipHalfHeight = (spaceShip.transform.localScale.y + 1f) / 2f;
+            float planetDiameter = planet.getPlanetDiameter();
+            Vector3 rayStart = pt.position + radialNormal * planetDiameter;
+
+            Vector3 uprightNormal;
+            if (Physics.Raycast(rayStart, -radialNormal, out RaycastHit landHit, planetDiameter * 2f))
+            {
+                spaceShip.transform.position = landHit.point + landHit.normal * (shipHalfHeight + shipSurfaceClearance);
+                uprightNormal = landHit.normal;
+            }
+            else
+            {
+                float snapRadius = planetDiameter / 2f + shipHalfHeight + shipSurfaceClearance;
+                spaceShip.transform.position = pt.position + radialNormal * snapRadius;
+                uprightNormal = radialNormal;
+            }
+            spaceShip.transform.rotation = Quaternion.FromToRotation(spaceShip.transform.up, uprightNormal) * spaceShip.transform.rotation;
 
             velocity = Vector3.zero;
             lastPlanetPos = pt.position;
@@ -165,14 +212,33 @@ namespace SolarSystemExplorer.Runtime
 
             spaceShip.transform.position += velocity * dt;
 
-            Vector3 toShip = spaceShip.transform.position - planet.getPlanet().transform.position;
-            float minDist = planet.getPlanetDiameter() / 2f + spaceShip.transform.localScale.y / 2f;
+            // Collision clamp: raycast from the ship toward the planet center. If the
+            // ray hits terrain within the ship's own half-height, push the ship back
+            // along the terrain normal and zero its velocity. Fall back to the old
+            // sphere clamp if the collider isn't ready.
+            Vector3 planetCenter = planet.getPlanet().transform.position;
+            Vector3 toShip = spaceShip.transform.position - planetCenter;
+            Vector3 downToPlanet = -toShip.normalized;
+            float shipHalfHeight = spaceShip.transform.localScale.y / 2f;
+            float castLen = toShip.magnitude + 1f;
 
-            if (toShip.magnitude < minDist)
+            if (launchLockTimer <= 0f && Physics.Raycast(spaceShip.transform.position, downToPlanet, out RaycastHit clampHit, castLen))
             {
-                Vector3 normal = toShip.normalized;
-                spaceShip.transform.position = planet.getPlanet().transform.position + normal * minDist;
-                velocity = Vector3.zero;
+                if (clampHit.distance < shipHalfHeight + shipSurfaceClearance)
+                {
+                    spaceShip.transform.position = clampHit.point + clampHit.normal * (shipHalfHeight + shipSurfaceClearance);
+                    velocity = Vector3.zero;
+                }
+            }
+            else if (launchLockTimer <= 0f)
+            {
+                float minDist = planet.getPlanetDiameter() / 2f + shipHalfHeight + shipSurfaceClearance;
+                if (toShip.magnitude < minDist)
+                {
+                    Vector3 normal = toShip.normalized;
+                    spaceShip.transform.position = planetCenter + normal * minDist;
+                    velocity = Vector3.zero;
+                }
             }
         }
 
@@ -205,7 +271,6 @@ namespace SolarSystemExplorer.Runtime
             if (!isBoarded && dist < boardDistance)
             {
                 isBoarded = true;
-                player.getPlayer().GetComponent<MeshRenderer>().enabled = false;
 
                 mainCamera.transform.SetParent(null);
 
@@ -216,13 +281,19 @@ namespace SolarSystemExplorer.Runtime
             {
                 isBoarded = false;
 
-                player.getPlayer().transform.position =
-                    spaceShip.transform.position + spaceShip.transform.right * 2f;
-                player.getPlayer().GetComponent<MeshRenderer>().enabled = true;
+                Vector3 planetCenter = startingPlanet.transform.position;
+                Vector3 radialNormal = (spaceShip.transform.position - planetCenter).normalized;
+                Vector3 lateralOffset = Vector3.ProjectOnPlane(spaceShip.transform.right, radialNormal).normalized;
+                if (lateralOffset.sqrMagnitude < 0.0001f)
+                {
+                    lateralOffset = Vector3.Cross(radialNormal, spaceShip.transform.forward).normalized;
+                }
 
-                mainCamera.transform.SetParent(player.getPlayer().transform);
-                mainCamera.transform.localPosition = new Vector3(0f, 1f, 0f);
-                mainCamera.transform.localRotation = Quaternion.identity;
+                float planetDiameter = startingPlanet.transform.lossyScale.x * 2f;
+                Vector3 exitPosition = spaceShip.transform.position + lateralOffset * 4f + radialNormal * 2f;
+                player.SnapToSurface(startingPlanet.transform, planetDiameter, exitPosition);
+
+                mainCamera.transform.SetParent(null);
 
                 Cursor.lockState = CursorLockMode.Locked;
                 Cursor.visible = true;

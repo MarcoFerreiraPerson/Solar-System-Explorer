@@ -7,7 +7,7 @@ namespace SolarSystemExplorer.Runtime
         [SerializeField] private Transform star;
         [SerializeField] private Transform planet;
         [SerializeField] private Light directionalLight;
-        [SerializeField] private bool invertLightForward = true;
+        [SerializeField] private bool invertLightForward = false;
 
         public void Initialize(Transform starTransform, Transform planetTransform, Light sunLight)
         {
