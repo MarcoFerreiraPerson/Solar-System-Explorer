@@ -2,33 +2,163 @@ using UnityEngine;
 
 namespace SolarSystemExplorer.Runtime
 {
-    /// <summary>
-    /// Adapter between our code-driven Planet setup and the imported asset-driven
-    /// CelestialBodyGenerator. Creates an empty GameObject, attaches the generator,
-    /// loads the Humble Abode (Earth) settings from Resources, and schedules a
-    /// post-generation pass that swaps the Built-in-RP terrain material for a
-    /// URP-compatible one and writes biome colors into the mesh.
-    ///
-    /// The generator runs its setup in Start(), so the mesh and collider do not
-    /// exist on the frame Build() returns. Player/ship ground-finding raycasts
-    /// handle the missing-collider case with a fallback.
-    /// </summary>
-    public static class CelestialBodyPlanetBuilder
+    internal sealed class RuntimeBodyAssets
     {
-        public static GameObject Build(float radius, string settingsResourceName)
+        public CelestialBodySettings Settings { get; private set; }
+        public CelestialBodyShape Shape { get; private set; }
+        public CelestialBodyShading Shading { get; private set; }
+        public OceanSettings OceanSettings { get; private set; }
+
+        public static RuntimeBodyAssets Create(CelestialBodySettings baseSettings, PlanetProfile profile)
         {
-            var settings = Resources.Load<CelestialBodySettings>(settingsResourceName);
-            if (settings == null)
+            if (baseSettings == null || baseSettings.shape == null || baseSettings.shading == null)
             {
-                Debug.LogError($"CelestialBodyPlanetBuilder: could not load CelestialBodySettings from Resources/{settingsResourceName}");
                 return null;
             }
 
-            var planet = new GameObject("Planet");
-            planet.transform.localScale = Vector3.one * radius;
+            var settingsClone = Object.Instantiate(baseSettings);
+            settingsClone.name = $"{profile.Name} Settings";
+
+            var shapeClone = Object.Instantiate(baseSettings.shape);
+            shapeClone.name = $"{profile.Name} Shape";
+
+            var shadingClone = Object.Instantiate(baseSettings.shading);
+            shadingClone.name = $"{profile.Name} Shading";
+
+            OceanSettings oceanClone = null;
+            if (shadingClone.oceanSettings != null)
+            {
+                oceanClone = Object.Instantiate(shadingClone.oceanSettings);
+                oceanClone.name = $"{profile.Name} Ocean";
+                shadingClone.oceanSettings = oceanClone;
+            }
+
+            settingsClone.shape = shapeClone;
+            settingsClone.shading = shadingClone;
+
+            ApplyProfile(shapeClone, shadingClone, oceanClone, profile);
+
+            return new RuntimeBodyAssets
+            {
+                Settings = settingsClone,
+                Shape = shapeClone,
+                Shading = shadingClone,
+                OceanSettings = oceanClone,
+            };
+        }
+
+        public void Destroy()
+        {
+            DestroyObject(OceanSettings);
+            DestroyObject(Shading);
+            DestroyObject(Shape);
+            DestroyObject(Settings);
+
+            OceanSettings = null;
+            Shading = null;
+            Shape = null;
+            Settings = null;
+        }
+
+        private static void DestroyObject(Object obj)
+        {
+            if (obj == null)
+            {
+                return;
+            }
+
+            if (Application.isPlaying)
+            {
+                Object.Destroy(obj);
+            }
+            else
+            {
+                Object.DestroyImmediate(obj);
+            }
+        }
+
+        private static void ApplyProfile(
+            CelestialBodyShape shape,
+            CelestialBodyShading shading,
+            OceanSettings oceanSettings,
+            PlanetProfile profile)
+        {
+            shape.randomize = false;
+            shape.seed = profile.Seed;
+            shape.perturbVertices = profile.PerturbStrength > 0.001f;
+            shape.perturbStrength = profile.IsGasGiant
+                ? Mathf.Min(profile.PerturbStrength, 0.12f)
+                : Mathf.Min(profile.PerturbStrength, 0.30f);
+
+            if (shape is EarthShape earthShape)
+            {
+                float mountainStrength = profile.IsGasGiant
+                    ? Mathf.Min(profile.MountainStrength, 0.12f)
+                    : Mathf.Min(profile.MountainStrength, 0.65f);
+
+                earthShape.oceanFloorDepth = profile.OceanDepth;
+                earthShape.oceanDepthMultiplier = profile.HasOcean ? 5f : 2f;
+                earthShape.oceanFloorSmoothing = profile.IsGasGiant ? 0.9f : 0.6f;
+                earthShape.mountainBlend = Mathf.Lerp(1.45f, 0.95f, mountainStrength);
+                earthShape.ridgeNoise.elevation = Mathf.Lerp(1.25f, 5.6f, mountainStrength);
+                earthShape.ridgeNoise.power = Mathf.Lerp(1.2f, 2.0f, mountainStrength);
+                earthShape.ridgeNoise.peakSmoothing = Mathf.Lerp(1.15f, 0.85f, mountainStrength);
+                earthShape.ridgeNoise.scale = profile.IsGasGiant ? 0.85f : earthShape.ridgeNoise.scale;
+            }
+
+            shading.randomize = false;
+            shading.seed = profile.Seed;
+            shading.hasOcean = profile.HasOcean;
+            shading.oceanLevel = profile.HasOcean ? 1f : 0f;
+
+            if (shading is EarthShading earthShading)
+            {
+                earthShading.customizedCols = new EarthShading.EarthColours
+                {
+                    shoreColLow = profile.TerrainPalette.Low,
+                    shoreColHigh = profile.TerrainPalette.Mid,
+                    flatColLowA = profile.TerrainPalette.Low,
+                    flatColHighA = profile.TerrainPalette.Mid,
+                    flatColLowB = profile.TerrainPalette.Mid,
+                    flatColHighB = profile.TerrainPalette.High,
+                    steepLow = profile.TerrainPalette.High,
+                    steepHigh = profile.TerrainPalette.Peak,
+                };
+            }
+
+            if (oceanSettings != null)
+            {
+                oceanSettings.colA = profile.OceanColors.Shallow;
+                oceanSettings.colB = profile.OceanColors.Deep;
+                oceanSettings.smoothness = Mathf.Clamp01(profile.TerrainSmoothness + 0.35f);
+            }
+        }
+    }
+
+    public static class CelestialBodyPlanetBuilder
+    {
+        private const string EarthSettingsResource = "CelestialBodies/Earth/Earth";
+
+        public static GameObject Build(PlanetProfile profile)
+        {
+            var baseSettings = Resources.Load<CelestialBodySettings>(EarthSettingsResource);
+            if (baseSettings == null)
+            {
+                Debug.LogError($"CelestialBodyPlanetBuilder: could not load CelestialBodySettings from Resources/{EarthSettingsResource}");
+                return null;
+            }
+
+            RuntimeBodyAssets runtimeAssets = RuntimeBodyAssets.Create(baseSettings, profile);
+            if (runtimeAssets == null || runtimeAssets.Settings == null)
+            {
+                return null;
+            }
+
+            var planet = new GameObject(profile.Name);
+            planet.transform.localScale = Vector3.one * profile.Radius;
 
             var generator = planet.AddComponent<CelestialBodyGenerator>();
-            generator.body = settings;
+            generator.body = runtimeAssets.Settings;
             generator.resolutionSettings = new CelestialBodyGenerator.ResolutionSettings
             {
                 lod0 = 300,
@@ -37,26 +167,27 @@ namespace SolarSystemExplorer.Runtime
                 collider = 100,
             };
 
-            // URP fix: the imported Earth shader is Built-in RP and renders magenta under URP.
-            // This helper waits for the generator's Start() to populate the "Terrain Mesh"
-            // child, then swaps in a URP shader and paints vertex colors from the height data.
-            planet.AddComponent<CelestialBodyTerrainFixup>();
+            var fixup = planet.AddComponent<CelestialBodyTerrainFixup>();
+            fixup.Initialize(profile, runtimeAssets);
 
             return planet;
         }
     }
 
-    /// <summary>
-    /// Runs after CelestialBodyGenerator.Start() has created the "Terrain Mesh"
-    /// child. Replaces the Built-in-RP terrain material with a URP shader and
-    /// writes per-vertex biome colors based on height above the reference sphere.
-    /// </summary>
     public class CelestialBodyTerrainFixup : MonoBehaviour
     {
         private const string OceanObjectName = "Ocean Sphere";
+        private PlanetProfile profile;
+        private RuntimeBodyAssets runtimeAssets;
         private bool applied;
 
-        void LateUpdate()
+        internal void Initialize(PlanetProfile planetProfile, RuntimeBodyAssets assets)
+        {
+            profile = planetProfile;
+            runtimeAssets = assets;
+        }
+
+        private void LateUpdate()
         {
             if (applied) return;
 
@@ -72,8 +203,6 @@ namespace SolarSystemExplorer.Runtime
 
             var mesh = filter.sharedMesh;
 
-            // Compute height range over the actual vertices so the color ramp is calibrated
-            // even if the shape asset's heightMinMax is unavailable.
             var vertices = mesh.vertices;
             float minR = float.PositiveInfinity;
             float maxR = float.NegativeInfinity;
@@ -91,40 +220,16 @@ namespace SolarSystemExplorer.Runtime
             var colors = new Color[vertices.Length];
             for (int i = 0; i < vertices.Length; i++)
             {
-                float r = vertices[i].magnitude;
-
-                // Biome ramp: deep blue → shallow blue → sand → green → brown → grey/white
-                Color c;
-                if (r < oceanLevel)
-                {
-                    // Underwater: deep blue to teal
-                    float t = (r - minR) / Mathf.Max(1e-4f, oceanLevel - minR);
-                    c = Color.Lerp(new Color(0.03f, 0.08f, 0.25f), new Color(0.12f, 0.35f, 0.55f), t);
-                }
-                else
-                {
-                    float tLand = (r - oceanLevel) / Mathf.Max(1e-4f, maxR - oceanLevel);
-                    if (tLand < 0.05f)
-                        c = new Color(0.80f, 0.75f, 0.55f); // beach
-                    else if (tLand < 0.40f)
-                        c = Color.Lerp(new Color(0.20f, 0.45f, 0.15f), new Color(0.35f, 0.50f, 0.18f), (tLand - 0.05f) / 0.35f);
-                    else if (tLand < 0.75f)
-                        c = Color.Lerp(new Color(0.35f, 0.30f, 0.18f), new Color(0.45f, 0.40f, 0.32f), (tLand - 0.40f) / 0.35f);
-                    else
-                        c = Color.Lerp(new Color(0.55f, 0.55f, 0.58f), Color.white, (tLand - 0.75f) / 0.25f);
-                }
-
-                colors[i] = c;
+                colors[i] = SampleTerrainColor(vertices[i].magnitude, minR, maxR, oceanLevel);
             }
             mesh.colors = colors;
 
-            // Swap the material for a URP-compatible one
             var urpShader = Shader.Find("SolarSystemExplorer/PlanetTerrainURP");
             if (urpShader != null)
             {
                 var mat = new Material(urpShader);
                 mat.SetColor("_Tint", Color.white);
-                mat.SetFloat("_Smoothness", 0.15f);
+                mat.SetFloat("_Smoothness", profile.TerrainSmoothness);
                 mat.SetFloat("_Metallic", 0f);
                 renderer.sharedMaterial = mat;
             }
@@ -135,6 +240,29 @@ namespace SolarSystemExplorer.Runtime
 
             EnsureOceanSphere(generator);
             applied = true;
+        }
+
+        private Color SampleTerrainColor(float radius, float minR, float maxR, float oceanLevel)
+        {
+            if (profile.HasOcean && radius < oceanLevel)
+            {
+                float oceanT = Mathf.InverseLerp(minR, oceanLevel, radius);
+                return Color.Lerp(profile.OceanColors.Deep, profile.OceanColors.Shallow, oceanT);
+            }
+
+            float landStart = profile.HasOcean ? oceanLevel : minR;
+            float landT = Mathf.InverseLerp(landStart, maxR, radius);
+            if (landT < 0.33f)
+            {
+                return Color.Lerp(profile.TerrainPalette.Low, profile.TerrainPalette.Mid, landT / 0.33f);
+            }
+
+            if (landT < 0.75f)
+            {
+                return Color.Lerp(profile.TerrainPalette.Mid, profile.TerrainPalette.High, (landT - 0.33f) / 0.42f);
+            }
+
+            return Color.Lerp(profile.TerrainPalette.High, profile.TerrainPalette.Peak, (landT - 0.75f) / 0.25f);
         }
 
         private void EnsureOceanSphere(CelestialBodyGenerator generator)
@@ -188,18 +316,19 @@ namespace SolarSystemExplorer.Runtime
             }
 
             var oceanMaterial = new Material(oceanShader);
-            OceanSettings oceanSettings = generator.body.shading.oceanSettings;
-            Color deepColor = oceanSettings != null ? oceanSettings.colB : new Color(0.05f, 0.18f, 0.35f, 1f);
-            Color shallowColor = oceanSettings != null ? oceanSettings.colA : new Color(0.22f, 0.7f, 0.78f, 1f);
-            float smoothness = oceanSettings != null ? oceanSettings.smoothness : 0.9f;
-
-            oceanMaterial.SetColor("_DeepColor", deepColor);
-            oceanMaterial.SetColor("_ShallowColor", shallowColor);
-            oceanMaterial.SetFloat("_Smoothness", smoothness);
+            oceanMaterial.SetColor("_DeepColor", profile.OceanColors.Deep);
+            oceanMaterial.SetColor("_ShallowColor", profile.OceanColors.Shallow);
+            oceanMaterial.SetFloat("_Smoothness", Mathf.Clamp01(profile.TerrainSmoothness + 0.35f));
             oceanMaterial.SetFloat("_Alpha", 0.75f);
             oceanRenderer.sharedMaterial = oceanMaterial;
             oceanRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             oceanRenderer.receiveShadows = false;
+        }
+
+        private void OnDestroy()
+        {
+            runtimeAssets?.Destroy();
+            runtimeAssets = null;
         }
     }
 }

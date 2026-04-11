@@ -16,6 +16,11 @@ namespace SolarSystemExplorer.Runtime
             directionalLight = sunLight;
         }
 
+        public void SetPlanet(Transform planetTransform)
+        {
+            planet = planetTransform;
+        }
+
         private void LateUpdate()
         {
             if (star == null || planet == null || directionalLight == null)

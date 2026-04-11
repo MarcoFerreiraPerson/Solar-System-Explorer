@@ -4,19 +4,13 @@ namespace SolarSystemExplorer.Runtime
 {
     public class Planet
     {
-        private const float PlanetDiameter = 300f;
-        private const float InitialOrbitRadius = 2000f;
-        private const float OrbitMinRadius = 700f;
-        private const float OrbitMaxRadius = 3600f;
         private const float OrbitMaxSpeed = 600f;
-        private const float planetMass = 2200000000f;
-        private const float minDistance = 600f;
 
-        // Resources-relative path to the CelestialBodySettings asset for Earth.
-        // Humble Abode is the imported Earth preset; we copied it into Resources at this path.
-        private const string EarthSettingsResource = "CelestialBodies/Earth/Earth";
+        private readonly GameObject planet;
 
-        private GameObject planet;
+        public PlanetProfile Profile { get; }
+        public Transform Transform => planet != null ? planet.transform : null;
+        public float Radius => Profile.Radius;
 
         public GameObject getPlanet()
         {
@@ -25,51 +19,66 @@ namespace SolarSystemExplorer.Runtime
 
         public float getPlanetDiameter()
         {
-            return PlanetDiameter;
+            return Profile.Diameter;
         }
 
-        public float getMass()
+        public Planet(PlanetProfile profile, Transform starTransform, float orbitAttractorMass, float orbitGravityConstant)
         {
-            return planetMass;
-        }
-
-        public float getMinDistance()
-        {
-            return minDistance;
-        }
-
-        public Planet(Transform starTransform, float OrbitAttractorMass, float OrbitGravityConstant)
-        {
-            planet = CelestialBodyPlanetBuilder.Build(PlanetDiameter / 2f, EarthSettingsResource);
+            Profile = profile;
+            planet = CelestialBodyPlanetBuilder.Build(profile);
             if (planet == null)
             {
-                // Fall back to a plain sphere so the scene still boots if the asset is missing
                 planet = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                planet.name = "Planet (fallback)";
-                planet.transform.localScale = Vector3.one * PlanetDiameter;
+                planet.name = $"{profile.Name} (fallback)";
+                planet.transform.localScale = Vector3.one * profile.Diameter;
             }
 
-            planet.transform.position = new Vector3(InitialOrbitRadius, 0f, 0f);
+            planet.name = profile.Name;
+            planet.transform.position = CalculateStartingPosition(profile);
 
-            ScaledNewtonianOrbit orbit = planet.AddComponent<ScaledNewtonianOrbit>();
-            ConfigurePlanetOrbit(orbit, starTransform, OrbitAttractorMass, OrbitGravityConstant);
+            var orbit = planet.AddComponent<ScaledNewtonianOrbit>();
+            ConfigurePlanetOrbit(orbit, profile, starTransform, orbitAttractorMass, orbitGravityConstant);
 
-            planet.AddComponent<AxialSpinner>();
+            var spinner = planet.AddComponent<AxialSpinner>();
+            spinner.Configure(Vector3.up, profile.AxialSpinDegPerSec);
         }
 
-        private static void ConfigurePlanetOrbit(ScaledNewtonianOrbit orbit, Transform starTransform, float OrbitAttractorMass, float OrbitGravityConstant)
+        public float GetSurfaceDistance(Vector3 position)
+        {
+            if (Transform == null)
+            {
+                return float.PositiveInfinity;
+            }
+
+            return Vector3.Distance(position, Transform.position) - Radius;
+        }
+
+        private static Vector3 CalculateStartingPosition(PlanetProfile profile)
+        {
+            Quaternion orbitRotation = Quaternion.AngleAxis(profile.InitialOrbitAngleDeg, Vector3.up);
+            return orbitRotation * Vector3.right * profile.OrbitRadius;
+        }
+
+        private static void ConfigurePlanetOrbit(
+            ScaledNewtonianOrbit orbit,
+            PlanetProfile profile,
+            Transform starTransform,
+            float orbitAttractorMass,
+            float orbitGravityConstant)
         {
             if (orbit == null || starTransform == null)
             {
                 return;
             }
 
+            float minOrbitRadius = Mathf.Max(200f, profile.OrbitRadius - profile.OrbitBand);
+            float maxOrbitRadius = profile.OrbitRadius + profile.OrbitBand;
             orbit.ConfigureOrbit(
                 starTransform,
-                OrbitGravityConstant,
-                OrbitAttractorMass,
-                OrbitMinRadius,
-                OrbitMaxRadius,
+                orbitGravityConstant,
+                orbitAttractorMass,
+                minOrbitRadius,
+                maxOrbitRadius,
                 OrbitMaxSpeed,
                 true,
                 Vector3.up);

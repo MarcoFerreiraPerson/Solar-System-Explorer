@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -5,6 +6,9 @@ namespace SolarSystemExplorer.Runtime
 {
     public class SpaceShip
     {
+        private const float PlanetSwitchHysteresis = 25f;
+        private const float BoostMultiplier = 3f;
+
         private float thrustPower = 60f;
         private float maxSpeed = 150f;
         private float fakeGravity = 80000f;
@@ -20,7 +24,7 @@ namespace SolarSystemExplorer.Runtime
         private Camera mainCamera;
         private Vector3 velocity;
 
-        private GameObject startingPlanet;
+        private Planet currentPlanet;
 
         private float landedThreshold = 3f;
 
@@ -36,6 +40,8 @@ namespace SolarSystemExplorer.Runtime
         private float camFollowHeight = 3f;
 
         public bool IsBoarded => isBoarded;
+        public bool IsLanded => state == 0;
+        public Planet CurrentPlanet => currentPlanet;
 
         public SpaceShip(Planet planet, Player player)
         {
@@ -47,9 +53,9 @@ namespace SolarSystemExplorer.Runtime
             // the planet terrain.
             SetLayerRecursively(spaceShip, 2);
             mainCamera = Camera.main;
-            startingPlanet = planet.getPlanet();
+            currentPlanet = planet;
 
-            Transform pt = startingPlanet.transform;
+            Transform pt = currentPlanet.Transform;
             float radius = planet.getPlanetDiameter() / 2f;
             Vector3 up = pt.up;
 
@@ -89,18 +95,33 @@ namespace SolarSystemExplorer.Runtime
                 spaceShip.transform.up);
         }
 
-        public void spaceshipUpdate(Planet planet, float Gconstant)
+        public void spaceshipUpdate(IReadOnlyList<Planet> planets)
         {
-            UpdateState(planet);
+            if (!IsLanded || currentPlanet == null)
+            {
+                currentPlanet = PlanetSelection.SelectBySurfaceDistance(planets, spaceShip.transform.position, currentPlanet, PlanetSwitchHysteresis);
+            }
+
+            UpdateState();
 
             if (state == 0)
-                updateLanded(planet);
+            {
+                updateLanded();
+            }
             else
-                updateFlying(planet);
+            {
+                updateFlying(planets);
+            }
         }
 
-        private void UpdateState(Planet planet)
+        private void UpdateState()
         {
+            if (currentPlanet == null || currentPlanet.getPlanet() == null)
+            {
+                state = 1;
+                return;
+            }
+
             if (launchLockTimer > 0f)
             {
                 launchLockTimer -= Time.deltaTime;
@@ -108,13 +129,9 @@ namespace SolarSystemExplorer.Runtime
                 return;
             }
 
-            // Altitude above the actual (displaced) terrain, not the nominal sphere.
-            // Raycast from the ship toward the planet center; altitude is the distance
-            // traveled before hitting terrain. Fall back to sphere-based if the raycast
-            // misses (first frame before collider exists, or ship is below surface).
-            Vector3 toShip = spaceShip.transform.position - startingPlanet.transform.position;
+            Vector3 toShip = spaceShip.transform.position - currentPlanet.Transform.position;
             Vector3 shipDown = -toShip.normalized;
-            float planetDiameter = planet.getPlanetDiameter();
+            float planetDiameter = currentPlanet.getPlanetDiameter();
             float altitude;
             if (Physics.Raycast(spaceShip.transform.position, shipDown, out RaycastHit altHit, planetDiameter))
             {
@@ -131,20 +148,25 @@ namespace SolarSystemExplorer.Runtime
                 state = 1;
         }
 
-        private void updateLanded(Planet planet)
+        private void updateLanded()
         {
-            if (isBoarded && Keyboard.current.spaceKey.isPressed)
+            if (currentPlanet == null || currentPlanet.getPlanet() == null)
+            {
+                return;
+            }
+
+            if (Keyboard.current != null && isBoarded && Keyboard.current.spaceKey.isPressed)
             {
                 state = 1;
                 launchLockTimer = launchLockDuration;
                 velocity = spaceShip.transform.up * launchVelocity;
 
-                lastPlanetPos = startingPlanet.transform.position;
-                lastPlanetRot = startingPlanet.transform.rotation;
+                lastPlanetPos = currentPlanet.Transform.position;
+                lastPlanetRot = currentPlanet.Transform.rotation;
                 return;
             }
 
-            Transform pt = startingPlanet.transform;
+            Transform pt = currentPlanet.Transform;
 
             Vector3 planetDelta = pt.position - lastPlanetPos;
             spaceShip.transform.position += planetDelta;
@@ -155,12 +177,9 @@ namespace SolarSystemExplorer.Runtime
             spaceShip.transform.position = pt.position + offset;
             spaceShip.transform.rotation = rotDelta * spaceShip.transform.rotation;
 
-            // Raycast-based landing snap. Cast from well above the peak toward the planet
-            // center to find the actual terrain, then sit on it oriented to the local
-            // surface normal. Fall back to sphere snap if the collider isn't ready.
             Vector3 radialNormal = (spaceShip.transform.position - pt.position).normalized;
             float shipHalfHeight = (spaceShip.transform.localScale.y + 1f) / 2f;
-            float planetDiameter = planet.getPlanetDiameter();
+            float planetDiameter = currentPlanet.getPlanetDiameter();
             Vector3 rayStart = pt.position + radialNormal * planetDiameter;
 
             Vector3 uprightNormal;
@@ -182,15 +201,24 @@ namespace SolarSystemExplorer.Runtime
             lastPlanetRot = pt.rotation;
         }
 
-        private void updateFlying(Planet planet)
+        private void updateFlying(IReadOnlyList<Planet> planets)
         {
+            if (currentPlanet == null || currentPlanet.getPlanet() == null)
+            {
+                return;
+            }
+
             float dt = Time.deltaTime;
+            float speedMultiplier = 1f;
 
             Vector3 thrust = Vector3.zero;
             bool thrusting = false;
 
-            if (isBoarded)
+            if (isBoarded && Keyboard.current != null)
             {
+                bool isBoosting = Keyboard.current.leftShiftKey.isPressed || Keyboard.current.rightShiftKey.isPressed;
+                speedMultiplier = isBoosting ? BoostMultiplier : 1f;
+
                 if (Keyboard.current.wKey.isPressed) { thrust -= spaceShip.transform.forward; thrusting = true; }
                 if (Keyboard.current.sKey.isPressed) { thrust += spaceShip.transform.forward; thrusting = true; }
                 if (Keyboard.current.aKey.isPressed) { thrust += spaceShip.transform.right; thrusting = true; }
@@ -199,24 +227,22 @@ namespace SolarSystemExplorer.Runtime
                 if (Keyboard.current.leftCtrlKey.isPressed) { thrust -= spaceShip.transform.up; thrusting = true; }
 
                 if (thrusting)
-                    velocity += thrust.normalized * thrustPower * dt;
+                    velocity += thrust.normalized * thrustPower * speedMultiplier * dt;
             }
 
-            Vector3 toPlanet = planet.getPlanet().transform.position - spaceShip.transform.position;
+            Vector3 toPlanet = currentPlanet.Transform.position - spaceShip.transform.position;
             float dist = Mathf.Max(toPlanet.magnitude, 1f);
             float gravScale = fakeGravity / (dist * dist);
             velocity += toPlanet.normalized * gravScale * dt;
 
-            if (velocity.sqrMagnitude > maxSpeed * maxSpeed)
-                velocity = velocity.normalized * maxSpeed;
+            float currentMaxSpeed = maxSpeed * speedMultiplier;
+            if (velocity.sqrMagnitude > currentMaxSpeed * currentMaxSpeed)
+                velocity = velocity.normalized * currentMaxSpeed;
 
             spaceShip.transform.position += velocity * dt;
 
-            // Collision clamp: raycast from the ship toward the planet center. If the
-            // ray hits terrain within the ship's own half-height, push the ship back
-            // along the terrain normal and zero its velocity. Fall back to the old
-            // sphere clamp if the collider isn't ready.
-            Vector3 planetCenter = planet.getPlanet().transform.position;
+            currentPlanet = PlanetSelection.SelectBySurfaceDistance(planets, spaceShip.transform.position, currentPlanet, PlanetSwitchHysteresis);
+            Vector3 planetCenter = currentPlanet.Transform.position;
             Vector3 toShip = spaceShip.transform.position - planetCenter;
             Vector3 downToPlanet = -toShip.normalized;
             float shipHalfHeight = spaceShip.transform.localScale.y / 2f;
@@ -232,7 +258,7 @@ namespace SolarSystemExplorer.Runtime
             }
             else if (launchLockTimer <= 0f)
             {
-                float minDist = planet.getPlanetDiameter() / 2f + shipHalfHeight + shipSurfaceClearance;
+                float minDist = currentPlanet.getPlanetDiameter() / 2f + shipHalfHeight + shipSurfaceClearance;
                 if (toShip.magnitude < minDist)
                 {
                     Vector3 normal = toShip.normalized;
@@ -244,14 +270,19 @@ namespace SolarSystemExplorer.Runtime
 
         public void HandleMouseLook()
         {
-            if (!isBoarded) return;
+            if (!isBoarded || Mouse.current == null) return;
 
             Vector2 delta = Mouse.current.delta.ReadValue();
 
             if (state == 0)
             {
-                Vector3 surfaceNormal = (spaceShip.transform.position - startingPlanet.transform.position).normalized;
-                    spaceShip.transform.Rotate(surfaceNormal, delta.x * mouseSensitivity, Space.World);
+                if (currentPlanet == null || currentPlanet.getPlanet() == null)
+                {
+                    return;
+                }
+
+                Vector3 surfaceNormal = (spaceShip.transform.position - currentPlanet.Transform.position).normalized;
+                spaceShip.transform.Rotate(surfaceNormal, delta.x * mouseSensitivity, Space.World);
             }
             else
             {
@@ -262,6 +293,11 @@ namespace SolarSystemExplorer.Runtime
 
         public void HandleBoarding()
         {
+            if (Keyboard.current == null)
+            {
+                return;
+            }
+
             if (!Keyboard.current.fKey.wasPressedThisFrame) return;
 
             float dist = Vector3.Distance(
@@ -281,7 +317,12 @@ namespace SolarSystemExplorer.Runtime
             {
                 isBoarded = false;
 
-                Vector3 planetCenter = startingPlanet.transform.position;
+                if (currentPlanet == null || currentPlanet.getPlanet() == null)
+                {
+                    return;
+                }
+
+                Vector3 planetCenter = currentPlanet.Transform.position;
                 Vector3 radialNormal = (spaceShip.transform.position - planetCenter).normalized;
                 Vector3 lateralOffset = Vector3.ProjectOnPlane(spaceShip.transform.right, radialNormal).normalized;
                 if (lateralOffset.sqrMagnitude < 0.0001f)
@@ -289,9 +330,8 @@ namespace SolarSystemExplorer.Runtime
                     lateralOffset = Vector3.Cross(radialNormal, spaceShip.transform.forward).normalized;
                 }
 
-                float planetDiameter = startingPlanet.transform.lossyScale.x * 2f;
                 Vector3 exitPosition = spaceShip.transform.position + lateralOffset * 4f + radialNormal * 2f;
-                player.SnapToSurface(startingPlanet.transform, planetDiameter, exitPosition);
+                player.LandOnPlanet(currentPlanet, exitPosition);
 
                 mainCamera.transform.SetParent(null);
 

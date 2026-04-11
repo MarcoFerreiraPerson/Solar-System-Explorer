@@ -1,5 +1,3 @@
-using SolarSystemExplorer.Runtime;
-using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -7,9 +5,7 @@ namespace SolarSystemExplorer.Runtime
 {
     public class Player
     {
-
-        [SerializeField] private float movementSpeed = 8;
-        [SerializeField] private float mass;
+        [SerializeField] private float movementSpeed = 8f;
         private const float GroundClearance = 0.35f;
         private const float GroundProbeHeight = 4f;
         private const float GravityAcceleration = 26f;
@@ -22,29 +18,27 @@ namespace SolarSystemExplorer.Runtime
         private const float ColliderHeight = 2f;
         private const float ColliderRadius = 0.5f;
         private const float PenetrationBuffer = 0.02f;
-        private const int TerrainQueryMask = ~ (1 << 2);
+        private const int TerrainQueryMask = ~(1 << 2);
 
         private float mouseSensitivity = 0.2f;
         private float pitch = 0f;
 
-        GameObject startingPlanet;
-        Vector3 planetCenterPos;
-        Vector3 lastPlanetCenterPos;
-        Quaternion lastPlanetRotation;
-        Camera mainCamera;
-        CapsuleCollider playerCollider;
-        float verticalVelocity;
-        bool isGrounded;
-        bool cameraInitialized;
-        //private Vector3 velocity;
-        //[SerializeField] private float maxSpeed = 50f;
+        private Planet currentPlanet;
+        private Vector3 planetCenterPos;
+        private Vector3 lastPlanetCenterPos;
+        private Quaternion lastPlanetRotation;
+        private Camera mainCamera;
+        private CapsuleCollider playerCollider;
+        private float verticalVelocity;
+        private bool isGrounded;
+        private bool cameraInitialized;
 
         private GameObject player;
-        // Start is called once before the first execution of Update after the MonoBehaviour is create
-        
+        public Planet CurrentPlanet => currentPlanet;
+
         public GameObject getPlayer()
         {
-            return player; 
+            return player;
         }
 
         public Player(Planet planet)
@@ -64,21 +58,50 @@ namespace SolarSystemExplorer.Runtime
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
 
-            startingPlanet = planet.getPlanet();
-            lastPlanetCenterPos = startingPlanet.transform.position;
-            lastPlanetRotation = startingPlanet.transform.rotation;
-            Vector3 playerStartingPos = startingPlanet.transform.position + player.transform.up * (planet.getPlanetDiameter() / 2f + GetStandingHeight() + 1.5f);
+            SetCurrentPlanet(planet);
 
+            Transform planetTransform = currentPlanet.Transform;
+            Vector3 playerStartingPos = planetTransform.position + planetTransform.up * (currentPlanet.getPlanetDiameter() / 2f + GetStandingHeight() + 1.5f);
             player.transform.position = playerStartingPos;
+            player.transform.rotation = Quaternion.FromToRotation(Vector3.up, planetTransform.up);
             SnapCameraToPlayer();
         }
 
-        public void updatePlayer(Planet planet,float Gconstant)
+        public void SetCurrentPlanet(Planet planet)
         {
+            currentPlanet = planet;
+            if (currentPlanet == null)
+            {
+                return;
+            }
+
+            lastPlanetCenterPos = currentPlanet.Transform.position;
+            lastPlanetRotation = currentPlanet.Transform.rotation;
+        }
+
+        public void LandOnPlanet(Planet planet, Vector3 desiredPosition)
+        {
+            if (planet == null)
+            {
+                return;
+            }
+
+            SetCurrentPlanet(planet);
+            SnapToSurface(planet.Transform, planet.getPlanetDiameter(), desiredPosition);
+            lastPlanetCenterPos = planet.Transform.position;
+            lastPlanetRotation = planet.Transform.rotation;
+        }
+
+        public void updatePlayer()
+        {
+            if (currentPlanet == null || currentPlanet.getPlanet() == null)
+            {
+                return;
+            }
+
             float dt = Time.deltaTime;
             Vector3 playerPos = player.transform.position;
-            Transform planetTransform = planet.getPlanet().transform;
-
+            Transform planetTransform = currentPlanet.Transform;
             planetCenterPos = planetTransform.position;
 
             Vector3 planetDelta = planetCenterPos - lastPlanetCenterPos;
@@ -106,7 +129,7 @@ namespace SolarSystemExplorer.Runtime
             Vector3 targetUp = radialNormal;
             float standingHeight = GetStandingHeight();
 
-            if (TryFindGround(playerPos, radialNormal, planetCenterPos, planet.getPlanetDiameter(), out RaycastHit hit))
+            if (TryFindGround(playerPos, radialNormal, planetCenterPos, currentPlanet.getPlanetDiameter(), out RaycastHit hit))
             {
                 targetUp = Vector3.Slerp(radialNormal, hit.normal, 0.25f).normalized;
                 float distanceToGround = Vector3.Dot(playerPos - hit.point, radialNormal);
@@ -154,10 +177,9 @@ namespace SolarSystemExplorer.Runtime
 
             lastPlanetCenterPos = planetCenterPos;
             lastPlanetRotation = currentRotation;
-
         }
 
-        public void SnapToSurface(Transform planetTransform, float planetDiameter, Vector3 desiredPosition)
+        private void SnapToSurface(Transform planetTransform, float planetDiameter, Vector3 desiredPosition)
         {
             Vector3 planetPos = planetTransform.position;
             Vector3 radialNormal = (desiredPosition - planetPos).normalized;
@@ -174,8 +196,6 @@ namespace SolarSystemExplorer.Runtime
                 snappedPosition = planetPos + radialNormal * surfaceHeight;
             }
 
-            // Use the planet radial-up for orientation rather than the triangle normal
-            // from the collision mesh, which keeps walking stable on low-res collider facets.
             player.transform.rotation = Quaternion.FromToRotation(player.transform.up, radialNormal) * player.transform.rotation;
             player.transform.position = snappedPosition;
             verticalVelocity = 0f;
@@ -238,8 +258,6 @@ namespace SolarSystemExplorer.Runtime
             pointB = position - offset;
         }
 
-
-
         private Vector3 MovePlayer(Vector3 playerPos, Vector3 surfaceNormal)
         {
             float dt = Time.deltaTime;
@@ -263,6 +281,11 @@ namespace SolarSystemExplorer.Runtime
 
         private void RotateCamera(Vector3 surfaceNormal)
         {
+            if (Mouse.current == null)
+            {
+                return;
+            }
+
             Vector2 delta = Mouse.current.delta.ReadValue();
 
             float mouseX = delta.x;
