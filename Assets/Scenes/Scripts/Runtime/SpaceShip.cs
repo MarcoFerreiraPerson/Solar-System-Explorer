@@ -36,8 +36,8 @@ namespace SolarSystemExplorer.Runtime
         private Vector3 lastPlanetPos;
         private Quaternion lastPlanetRot;
 
-        private float camFollowDistance = 15f;
-        private float camFollowHeight = 3f;
+        private float camFollowDistance = 48f;
+        private float camFollowHeight = 12f;
 
         public bool IsBoarded => isBoarded;
         public bool IsLanded => state == 0;
