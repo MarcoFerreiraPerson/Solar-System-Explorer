@@ -138,6 +138,20 @@ namespace SolarSystemExplorer.Runtime
     public static class CelestialBodyPlanetBuilder
     {
         private const string EarthSettingsResource = "CelestialBodies/Earth/Earth";
+        private static readonly CelestialBodyGenerator.ResolutionSettings DesktopResolutionSettings = new CelestialBodyGenerator.ResolutionSettings
+        {
+            lod0 = 300,
+            lod1 = 100,
+            lod2 = 50,
+            collider = 100,
+        };
+        private static readonly CelestialBodyGenerator.ResolutionSettings WebGlResolutionSettings = new CelestialBodyGenerator.ResolutionSettings
+        {
+            lod0 = 120,
+            lod1 = 60,
+            lod2 = 30,
+            collider = 48,
+        };
 
         public static GameObject Build(PlanetProfile profile)
         {
@@ -159,18 +173,24 @@ namespace SolarSystemExplorer.Runtime
 
             var generator = planet.AddComponent<CelestialBodyGenerator>();
             generator.body = runtimeAssets.Settings;
-            generator.resolutionSettings = new CelestialBodyGenerator.ResolutionSettings
-            {
-                lod0 = 300,
-                lod1 = 100,
-                lod2 = 50,
-                collider = 100,
-            };
+            generator.resolutionSettings = CreateResolutionSettings();
 
             var fixup = planet.AddComponent<CelestialBodyTerrainFixup>();
             fixup.Initialize(profile, runtimeAssets);
 
             return planet;
+        }
+
+        private static CelestialBodyGenerator.ResolutionSettings CreateResolutionSettings()
+        {
+            var source = ComputeHelper.SupportsCompute ? DesktopResolutionSettings : WebGlResolutionSettings;
+            return new CelestialBodyGenerator.ResolutionSettings
+            {
+                lod0 = source.lod0,
+                lod1 = source.lod1,
+                lod2 = source.lod2,
+                collider = source.collider,
+            };
         }
     }
 

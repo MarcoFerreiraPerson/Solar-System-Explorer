@@ -1,5 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using SolarSystemExplorer.Runtime.WebGL.CpuPlanetCompute;
 using UnityEngine;
 
 [CreateAssetMenu (menuName = "Celestial Body/Earth-Like/Earth Shape")]
@@ -19,6 +18,12 @@ public class EarthShape : CelestialBodyShape {
 	public RidgeNoiseSettings ridgeNoise;
 	public Vector4 testParams;
 
+	public override bool SupportsCpuGeneration {
+		get {
+			return true;
+		}
+	}
+
 	protected override void SetShapeData () {
 		var prng = new PRNG (seed);
 		continentNoise.SetComputeValues (heightMapCompute, prng, "_continents");
@@ -33,6 +38,25 @@ public class EarthShape : CelestialBodyShape {
 
 		//
 
+	}
+
+	public override void CalculateHeightsCpu (Vector3[] vertices, float[] heights) {
+		var kernel = new CpuEarthHeightKernel (this, seed);
+		kernel.CalculateHeights (vertices, heights);
+	}
+
+	public override bool PerturbVerticesCpu (Vector3[] vertices, float maxPerturbStrength) {
+		if (!perturbVertices) {
+			return false;
+		}
+
+		var kernel = CpuPlanetKernelFactory.CreatePerturbKernel (perturbCompute);
+		if (kernel == null) {
+			return false;
+		}
+
+		kernel.Perturb (vertices, maxPerturbStrength);
+		return true;
 	}
 
 }

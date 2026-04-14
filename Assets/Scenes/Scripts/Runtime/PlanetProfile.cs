@@ -95,7 +95,7 @@ namespace SolarSystemExplorer.Runtime
         {
             new PlanetProfile(
                 "Mercury",
-                270f,
+                180f,
                 1400f,
                 0f,
                 60f,
@@ -115,7 +115,7 @@ namespace SolarSystemExplorer.Runtime
                 OceanPalette.Default),
             new PlanetProfile(
                 "Venus",
-                540f,
+                360f,
                 2800f,
                 45f,
                 90f,
@@ -135,7 +135,7 @@ namespace SolarSystemExplorer.Runtime
                 OceanPalette.Default),
             new PlanetProfile(
                 "Earth",
-                450f,
+                300f,
                 4800f,
                 90f,
                 120f,
@@ -157,7 +157,7 @@ namespace SolarSystemExplorer.Runtime
                     new Color(0.04f, 0.15f, 0.35f, 1f))),
             new PlanetProfile(
                 "Mars",
-                360f,
+                240f,
                 7000f,
                 135f,
                 140f,
@@ -177,7 +177,7 @@ namespace SolarSystemExplorer.Runtime
                 OceanPalette.Default),
             new PlanetProfile(
                 "Jupiter",
-                930f,
+                620f,
                 9800f,
                 180f,
                 180f,
@@ -197,7 +197,7 @@ namespace SolarSystemExplorer.Runtime
                 OceanPalette.Default),
             new PlanetProfile(
                 "Saturn",
-                780f,
+                520f,
                 13200f,
                 225f,
                 220f,
@@ -217,7 +217,7 @@ namespace SolarSystemExplorer.Runtime
                 OceanPalette.Default),
             new PlanetProfile(
                 "Uranus",
-                510f,
+                340f,
                 17000f,
                 270f,
                 260f,
@@ -237,7 +237,7 @@ namespace SolarSystemExplorer.Runtime
                 OceanPalette.Default),
             new PlanetProfile(
                 "Neptune",
-                630f,
+                420f,
                 21000f,
                 315f,
                 320f,

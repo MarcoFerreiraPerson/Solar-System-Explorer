@@ -14,7 +14,7 @@ Shader "SolarSystemExplorer/PlanetTerrainURP"
     SubShader
     {
         Tags { "RenderType"="Opaque" "RenderPipeline"="UniversalPipeline" "Queue"="Geometry" }
-        LOD 200
+        LOD 100
 
         Pass
         {
@@ -25,13 +25,10 @@ Shader "SolarSystemExplorer/PlanetTerrainURP"
             #pragma vertex vert
             #pragma fragment frag
 
-            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS
-            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile_fog
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _Tint;
@@ -75,17 +72,16 @@ Shader "SolarSystemExplorer/PlanetTerrainURP"
                 float3 N = normalize(IN.normalWS);
                 float3 baseColor = IN.color.rgb * _Tint.rgb;
                 float3 viewDir = GetWorldSpaceNormalizeViewDir(IN.positionWS);
-                float4 shadowCoord = TransformWorldToShadowCoord(IN.positionWS);
-                Light mainLight = GetMainLight(shadowCoord);
+                Light mainLight = GetMainLight();
 
                 float NdotL = saturate(dot(N, mainLight.direction));
                 float3 ambient = baseColor * _AmbientStrength;
-                float3 diffuse = baseColor * mainLight.color * (NdotL * mainLight.shadowAttenuation);
+                float3 diffuse = baseColor * mainLight.color * NdotL;
 
                 float3 halfDir = normalize(mainLight.direction + viewDir);
                 float specularPower = lerp(16.0, 96.0, _Smoothness);
                 float specularStrength = pow(saturate(dot(N, halfDir)), specularPower) * _Smoothness;
-                float3 specular = mainLight.color * specularStrength * mainLight.shadowAttenuation;
+                float3 specular = mainLight.color * specularStrength;
 
                 half4 color = half4(ambient + diffuse + specular, 1);
                 color.rgb = MixFog(color.rgb, IN.fogFactor);
@@ -93,88 +89,5 @@ Shader "SolarSystemExplorer/PlanetTerrainURP"
             }
             ENDHLSL
         }
-
-        // Shadow caster so the planet casts shadows on itself/ship/player
-        Pass
-        {
-            Name "ShadowCaster"
-            Tags { "LightMode"="ShadowCaster" }
-            ZWrite On
-            ZTest LEqual
-            ColorMask 0
-
-            HLSLPROGRAM
-            #pragma vertex ShadowPassVertex
-            #pragma fragment ShadowPassFragment
-
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
-
-            struct Attributes
-            {
-                float4 positionOS : POSITION;
-                float3 normalOS   : NORMAL;
-            };
-
-            struct Varyings
-            {
-                float4 positionCS : SV_POSITION;
-            };
-
-            float3 _LightDirection;
-
-            Varyings ShadowPassVertex(Attributes IN)
-            {
-                Varyings OUT;
-                float3 positionWS = TransformObjectToWorld(IN.positionOS.xyz);
-                float3 normalWS   = TransformObjectToWorldNormal(IN.normalOS);
-                float4 positionCS = TransformWorldToHClip(ApplyShadowBias(positionWS, normalWS, _LightDirection));
-#if UNITY_REVERSED_Z
-                positionCS.z = min(positionCS.z, UNITY_NEAR_CLIP_VALUE);
-#else
-                positionCS.z = max(positionCS.z, UNITY_NEAR_CLIP_VALUE);
-#endif
-                OUT.positionCS = positionCS;
-                return OUT;
-            }
-
-            half4 ShadowPassFragment(Varyings IN) : SV_TARGET
-            {
-                return 0;
-            }
-            ENDHLSL
-        }
-
-        // Depth only (needed for URP depth prepass / some post effects)
-        Pass
-        {
-            Name "DepthOnly"
-            Tags { "LightMode"="DepthOnly" }
-            ZWrite On
-            ColorMask 0
-
-            HLSLPROGRAM
-            #pragma vertex DepthOnlyVertex
-            #pragma fragment DepthOnlyFragment
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-
-            struct Attributes { float4 positionOS : POSITION; };
-            struct Varyings   { float4 positionCS : SV_POSITION; };
-
-            Varyings DepthOnlyVertex(Attributes IN)
-            {
-                Varyings OUT;
-                OUT.positionCS = TransformObjectToHClip(IN.positionOS.xyz);
-                return OUT;
-            }
-
-            half4 DepthOnlyFragment(Varyings IN) : SV_TARGET
-            {
-                return 0;
-            }
-            ENDHLSL
-        }
     }
-
-    FallBack "Universal Render Pipeline/Lit"
 }

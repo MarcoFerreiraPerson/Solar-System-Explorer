@@ -1,5 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using SolarSystemExplorer.Runtime.WebGL.CpuPlanetCompute;
 using UnityEngine;
 
 [CreateAssetMenu (menuName = "Celestial Body/Earth-Like/Earth Shading")]
@@ -13,6 +12,12 @@ public class EarthShading : CelestialBodyShading {
 	public SimpleNoiseSettings detailNoise;
 	public SimpleNoiseSettings largeNoise;
 	public SimpleNoiseSettings smallNoise;
+
+	public override bool SupportsCpuGeneration {
+		get {
+			return true;
+		}
+	}
 
 	public override void SetTerrainProperties (Material material, Vector2 heightMinMax, float bodyScale) {
 
@@ -84,6 +89,11 @@ public class EarthShading : CelestialBodyShading {
 		detailWarpNoise.SetComputeValues (shadingDataCompute, random, "_detailWarp");
 		largeNoise.SetComputeValues (shadingDataCompute, random, "_large");
 		smallNoise.SetComputeValues (shadingDataCompute, random, "_small");
+	}
+
+	public override void GenerateShadingDataCpu (Vector3[] vertices, Vector4[] shadingData) {
+		var kernel = new CpuEarthShadingKernel (this, seed);
+		kernel.CalculateShadingData (vertices, shadingData);
 	}
 
 	[System.Serializable]
