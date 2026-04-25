@@ -17,7 +17,6 @@ public class SolarSystemInit : MonoBehaviour
     {
         playerInput = new InputSystem_Actions();
         solarSystemBootstrap = new SolarSystemBootstrap();
-        Debug.Log(playerInput.Player.enabled);
         solarSystemBootstrap.initialize(transform);
     }
 
@@ -27,15 +26,10 @@ public class SolarSystemInit : MonoBehaviour
     }
 
     private void OnEnable()
-{
-        Debug.Log("SolarSystemInit OnEnable");
-
+    {
         playerInput.Player.Interact.performed += OnInteractPressed;
         playerInput.Player.Quit.performed += OnQuitPressed;
         playerInput.Enable();
-        Debug.Log(playerInput.Player.enabled);
-
-        Debug.Log("Input enabled");
     }
 
     void OnDisable()
@@ -50,13 +44,10 @@ public class SolarSystemInit : MonoBehaviour
     }
 
     private void OnInteractPressed(InputAction.CallbackContext _) {
-        Debug.Log("Interact pressed");
         SceneManager.LoadScene(solarSystemSceneName);
     }
 
     private void OnQuitPressed(InputAction.CallbackContext _) {
-        Debug.Log("Quit pressed");
-       
         #if UNITY_EDITOR
             EditorApplication.isPlaying = false;
         #else
@@ -65,4 +56,3 @@ public class SolarSystemInit : MonoBehaviour
     }
 
 }
-

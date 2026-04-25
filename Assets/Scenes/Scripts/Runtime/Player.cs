@@ -10,6 +10,19 @@ namespace SolarSystemExplorer.Runtime
 
         [SerializeField] private float movementSpeed = 8;
         [SerializeField] private float mass;
+        private const float GroundClearance = 0.35f;
+        private const float GroundProbeHeight = 4f;
+        private const float GravityAcceleration = 26f;
+        private const float JumpSpeed = 12f;
+        private const float GroundSnapSharpness = 20f;
+        private const float GroundContactPadding = 0.75f;
+        private const float CameraHeight = 1f;
+        private const float CameraPositionSmoothness = 18f;
+        private const float CameraRotationSmoothness = 22f;
+        private const float ColliderHeight = 2f;
+        private const float ColliderRadius = 0.5f;
+        private const float PenetrationBuffer = 0.02f;
+        private const int TerrainQueryMask = ~ (1 << 2);
 
         private float mouseSensitivity = 0.2f;
         private float pitch = 0f;
@@ -19,6 +32,10 @@ namespace SolarSystemExplorer.Runtime
         Vector3 lastPlanetCenterPos;
         Quaternion lastPlanetRotation;
         Camera mainCamera;
+        CapsuleCollider playerCollider;
+        float verticalVelocity;
+        bool isGrounded;
+        bool cameraInitialized;
         //private Vector3 velocity;
         //[SerializeField] private float maxSpeed = 50f;
 
@@ -32,11 +49,17 @@ namespace SolarSystemExplorer.Runtime
 
         public Player(Planet planet)
         {
-            player = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+            player = new GameObject("Player");
+            // Put the player on Ignore Raycast (layer 2) so terrain queries
+            // exclude the player's own collision body.
+            player.layer = 2;
+            playerCollider = player.AddComponent<CapsuleCollider>();
+            playerCollider.height = ColliderHeight;
+            playerCollider.radius = ColliderRadius;
+            playerCollider.center = Vector3.zero;
+
             mainCamera = Camera.main;
-            mainCamera.transform.SetParent(player.transform);
-            mainCamera.transform.localPosition = new Vector3(0f, 1f, 0f);
-            mainCamera.transform.localRotation = Quaternion.identity;
+            mainCamera.transform.SetParent(null);
 
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
@@ -44,13 +67,15 @@ namespace SolarSystemExplorer.Runtime
             startingPlanet = planet.getPlanet();
             lastPlanetCenterPos = startingPlanet.transform.position;
             lastPlanetRotation = startingPlanet.transform.rotation;
-            Vector3 playerStartingPos = startingPlanet.transform.position + player.transform.up * (planet.getPlanetDiameter() / 2f + (player.transform.localScale.y + 3) / 2f);
+            Vector3 playerStartingPos = startingPlanet.transform.position + player.transform.up * (planet.getPlanetDiameter() / 2f + GetStandingHeight() + 1.5f);
 
             player.transform.position = playerStartingPos;
+            SnapCameraToPlayer();
         }
 
         public void updatePlayer(Planet planet,float Gconstant)
         {
+            float dt = Time.deltaTime;
             Vector3 playerPos = player.transform.position;
             Transform planetTransform = planet.getPlanet().transform;
 
@@ -70,23 +95,147 @@ namespace SolarSystemExplorer.Runtime
 
             player.transform.rotation = deltaRotation * player.transform.rotation;
 
-            Vector3 surfaceNormal = (playerPos - planetCenterPos).normalized;
-            RotateCamera(surfaceNormal);
-            playerPos = MovePlayer(playerPos, surfaceNormal);
+            Vector3 radialNormal = (playerPos - planetCenterPos).normalized;
+            RotateCamera(radialNormal);
+            // Move relative to the radial-up so hills don't reduce stride length
+            playerPos = MovePlayer(playerPos, radialNormal);
 
-            surfaceNormal = (playerPos - planetCenterPos).normalized;
+            radialNormal = (playerPos - planetCenterPos).normalized;
 
+            bool jumpPressed = Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame;
+            Vector3 targetUp = radialNormal;
+            float standingHeight = GetStandingHeight();
 
-            float surfaceHeight = planet.getPlanetDiameter() / 2f + (player.transform.localScale.y + 1) / 2f;
+            if (TryFindGround(playerPos, radialNormal, planetCenterPos, planet.getPlanetDiameter(), out RaycastHit hit))
+            {
+                targetUp = Vector3.Slerp(radialNormal, hit.normal, 0.25f).normalized;
+                float distanceToGround = Vector3.Dot(playerPos - hit.point, radialNormal);
+                bool closeToGround = distanceToGround <= standingHeight + GroundContactPadding;
 
-            playerPos = planetCenterPos + surfaceNormal * surfaceHeight;
-            player.transform.rotation = Quaternion.FromToRotation(player.transform.up, surfaceNormal) * player.transform.rotation;
+                if (closeToGround && verticalVelocity <= 0f)
+                {
+                    isGrounded = true;
+                    Vector3 groundedPosition = hit.point + radialNormal * standingHeight;
 
+                    if (jumpPressed)
+                    {
+                        playerPos = groundedPosition;
+                        verticalVelocity = JumpSpeed;
+                        isGrounded = false;
+                    }
+                    else
+                    {
+                        verticalVelocity = 0f;
+                        float snapT = 1f - Mathf.Exp(-GroundSnapSharpness * dt);
+                        playerPos = Vector3.Lerp(playerPos, groundedPosition, snapT);
+                    }
+                }
+                else
+                {
+                    isGrounded = false;
+                }
+            }
+            else
+            {
+                isGrounded = false;
+            }
+
+            if (!isGrounded)
+            {
+                verticalVelocity -= GravityAcceleration * dt;
+                playerPos += radialNormal * (verticalVelocity * dt);
+            }
+
+            Quaternion targetRotation = Quaternion.FromToRotation(player.transform.up, targetUp) * player.transform.rotation;
+            ResolveTerrainPenetration(ref playerPos, targetRotation, targetUp);
+            player.transform.rotation = targetRotation;
             player.transform.position = playerPos;
+            UpdateCameraTransform(dt);
 
             lastPlanetCenterPos = planetCenterPos;
             lastPlanetRotation = currentRotation;
 
+        }
+
+        public void SnapToSurface(Transform planetTransform, float planetDiameter, Vector3 desiredPosition)
+        {
+            Vector3 planetPos = planetTransform.position;
+            Vector3 radialNormal = (desiredPosition - planetPos).normalized;
+            float standingHeight = GetStandingHeight();
+            Vector3 snappedPosition;
+
+            if (TryFindGround(desiredPosition, radialNormal, planetPos, planetDiameter, out RaycastHit hit))
+            {
+                snappedPosition = hit.point + hit.normal * standingHeight;
+            }
+            else
+            {
+                float surfaceHeight = planetDiameter / 2f + standingHeight;
+                snappedPosition = planetPos + radialNormal * surfaceHeight;
+            }
+
+            // Use the planet radial-up for orientation rather than the triangle normal
+            // from the collision mesh, which keeps walking stable on low-res collider facets.
+            player.transform.rotation = Quaternion.FromToRotation(player.transform.up, radialNormal) * player.transform.rotation;
+            player.transform.position = snappedPosition;
+            verticalVelocity = 0f;
+            isGrounded = true;
+            SnapCameraToPlayer();
+        }
+
+        private bool TryFindGround(Vector3 desiredPosition, Vector3 radialNormal, Vector3 planetPos, float planetDiameter, out RaycastHit hit)
+        {
+            Vector3 localProbeStart = desiredPosition + radialNormal * GroundProbeHeight;
+            float localProbeDistance = GroundProbeHeight + GetStandingHeight() + 2f;
+            if (Physics.Raycast(localProbeStart, -radialNormal, out hit, localProbeDistance, TerrainQueryMask, QueryTriggerInteraction.Ignore))
+            {
+                return true;
+            }
+
+            Vector3 fallbackRayStart = planetPos + radialNormal * planetDiameter;
+            return Physics.Raycast(fallbackRayStart, -radialNormal, out hit, planetDiameter * 2f, TerrainQueryMask, QueryTriggerInteraction.Ignore);
+        }
+
+        private float GetStandingHeight()
+        {
+            return playerCollider.height * 0.5f + GroundClearance;
+        }
+
+        private void ResolveTerrainPenetration(ref Vector3 playerPos, Quaternion playerRotation, Vector3 up)
+        {
+            GetCapsuleWorldPoints(playerPos, up, out Vector3 pointA, out Vector3 pointB);
+            Collider[] overlaps = Physics.OverlapCapsule(pointA, pointB, playerCollider.radius, TerrainQueryMask, QueryTriggerInteraction.Ignore);
+
+            Vector3 totalCorrection = Vector3.zero;
+            for (int i = 0; i < overlaps.Length; i++)
+            {
+                Collider overlap = overlaps[i];
+                if (overlap == null)
+                {
+                    continue;
+                }
+
+                if (Physics.ComputePenetration(
+                    playerCollider, playerPos, playerRotation,
+                    overlap, overlap.transform.position, overlap.transform.rotation,
+                    out Vector3 direction, out float distance))
+                {
+                    totalCorrection += direction * (distance + PenetrationBuffer);
+                }
+            }
+
+            if (totalCorrection != Vector3.zero)
+            {
+                playerPos += totalCorrection;
+            }
+        }
+
+        private void GetCapsuleWorldPoints(Vector3 position, Vector3 up, out Vector3 pointA, out Vector3 pointB)
+        {
+            float halfSegment = Mathf.Max(0f, (playerCollider.height * 0.5f) - playerCollider.radius);
+            Vector3 offset = up.normalized * halfSegment;
+            pointA = position + offset;
+            pointB = position - offset;
         }
 
 
@@ -126,8 +275,37 @@ namespace SolarSystemExplorer.Runtime
 
             pitch -= pitchDelta;
             pitch = Mathf.Clamp(pitch, -80f, 80f);
+        }
 
-            mainCamera.transform.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+        private void UpdateCameraTransform(float dt)
+        {
+            Vector3 desiredPosition = player.transform.position + player.transform.up * CameraHeight;
+            Quaternion desiredRotation = Quaternion.AngleAxis(pitch, player.transform.right) * player.transform.rotation;
+
+            if (!cameraInitialized)
+            {
+                mainCamera.transform.position = desiredPosition;
+                mainCamera.transform.rotation = desiredRotation;
+                cameraInitialized = true;
+                return;
+            }
+
+            float positionT = 1f - Mathf.Exp(-CameraPositionSmoothness * dt);
+            float rotationT = 1f - Mathf.Exp(-CameraRotationSmoothness * dt);
+            mainCamera.transform.position = Vector3.Lerp(mainCamera.transform.position, desiredPosition, positionT);
+            mainCamera.transform.rotation = Quaternion.Slerp(mainCamera.transform.rotation, desiredRotation, rotationT);
+        }
+
+        private void SnapCameraToPlayer()
+        {
+            if (mainCamera == null)
+            {
+                return;
+            }
+
+            mainCamera.transform.position = player.transform.position + player.transform.up * CameraHeight;
+            mainCamera.transform.rotation = Quaternion.AngleAxis(pitch, player.transform.right) * player.transform.rotation;
+            cameraInitialized = true;
         }
     }
 }

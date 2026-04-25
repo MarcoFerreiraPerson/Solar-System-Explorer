@@ -5,7 +5,7 @@ namespace SolarSystemExplorer.Runtime
     public class AxialSpinner : MonoBehaviour
     {
         [SerializeField] private Vector3 localAxis = Vector3.up;
-        [SerializeField] private float degreesPerSecond = 10f;
+        [SerializeField] private float degreesPerSecond = 3f;
 
         private Vector3 normalizedAxis = Vector3.up;
 
