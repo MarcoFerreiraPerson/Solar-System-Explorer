@@ -19,6 +19,13 @@ namespace SolarSystemExplorer.Runtime
             CacheAxis();
         }
 
+        public void Configure(Vector3 axis, float spinRate)
+        {
+            localAxis = axis;
+            degreesPerSecond = spinRate;
+            CacheAxis();
+        }
+
         private void Update()
         {
             transform.Rotate(normalizedAxis, degreesPerSecond * Time.deltaTime, Space.Self);

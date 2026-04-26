@@ -27,6 +27,14 @@ public static class ComputeHelper {
 		}
 	}
 
+	// False on platforms without compute shader support (notably WebGL 2.0).
+	// Callers with a CPU fallback should branch on this instead of dispatching.
+	public static bool SupportsCompute {
+		get {
+			return SystemInfo.supportsComputeShaders && Application.platform != RuntimePlatform.WebGLPlayer;
+		}
+	}
+
 	// Set all values from settings object on the shader. Note, variable names must be an exact match in the shader.
 	// Settings object can be any class/struct containing vectors/ints/floats/bools
 	public static void SetParams (System.Object settings, ComputeShader shader, string variableNamePrefix = "", string variableNameSuffix = "") {

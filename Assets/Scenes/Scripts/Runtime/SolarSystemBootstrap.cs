@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Rendering;
+using System.Collections.Generic;
 
 namespace SolarSystemExplorer.Runtime
 {
@@ -9,32 +10,84 @@ namespace SolarSystemExplorer.Runtime
         private const float OrbitGravityConstant = 1f;
         private const float OrbitAttractorMass = 2200000f;
 
-        private Planet planet;
+        private readonly List<Planet> planets = new List<Planet>();
+        private Planet activePlanet;
+        private Planet earthStartPlanet;
         private GameObject star;
         private Player player;
         private SpaceShip spaceShip;
+        private StarDirectionalLightController lightController;
 
         public void initialize(Transform t)
         {
             DisableLegacy2DLighting();
             ConfigureEnvironmentLighting();
             star = CreateStar();
-            planet = new Planet(star.transform, OrbitAttractorMass, OrbitGravityConstant);
-            player = new Player(planet);
-            spaceShip = new SpaceShip(planet, player);
+            CreatePlanets();
+            earthStartPlanet = FindEarthPlanet();
+            activePlanet = earthStartPlanet;
+
+            player = new Player(earthStartPlanet);
+            spaceShip = new SpaceShip(earthStartPlanet, player);
             Light sunLight = CreateDirectionalSunLight();
-            CreateLightController(t, star.transform, planet.getPlanet().transform, sunLight);
+            ConfigureSunBloom(t, star);
+            lightController = CreateLightController(t, star.transform, activePlanet.Transform, sunLight);
         }
 
         public void systemUpdate()
         {
             spaceShip.HandleBoarding();
             spaceShip.HandleMouseLook();
-            spaceShip.spaceshipUpdate(planet, OrbitGravityConstant);
+            spaceShip.spaceshipUpdate(planets);
             spaceShip.UpdateCamera();
 
             if (!spaceShip.IsBoarded)
-                player.updatePlayer(planet, OrbitGravityConstant);
+            {
+                player.updatePlayer();
+            }
+
+            activePlanet = ResolveActivePlanet();
+            if (lightController != null && activePlanet != null)
+            {
+                lightController.SetPlanet(activePlanet.Transform);
+            }
+        }
+
+        private void CreatePlanets()
+        {
+            planets.Clear();
+            for (int i = 0; i < PlanetCatalog.All.Count; i++)
+            {
+                planets.Add(new Planet(PlanetCatalog.All[i], star.transform, OrbitAttractorMass, OrbitGravityConstant));
+            }
+        }
+
+        private Planet FindEarthPlanet()
+        {
+            for (int i = 0; i < planets.Count; i++)
+            {
+                if (planets[i].Profile.Name == PlanetCatalog.Earth.Name)
+                {
+                    return planets[i];
+                }
+            }
+
+            return planets.Count > 0 ? planets[0] : null;
+        }
+
+        private Planet ResolveActivePlanet()
+        {
+            if (spaceShip != null && spaceShip.IsBoarded && spaceShip.CurrentPlanet != null)
+            {
+                return spaceShip.CurrentPlanet;
+            }
+
+            if (player != null && player.CurrentPlanet != null)
+            {
+                return player.CurrentPlanet;
+            }
+
+            return earthStartPlanet;
         }
 
         private void DisableLegacy2DLighting()
@@ -104,6 +157,22 @@ namespace SolarSystemExplorer.Runtime
             return shader == null ? null : new Material(shader);
         }
 
+        private static void ConfigureSunBloom(Transform root, GameObject sun)
+        {
+            if (root == null || sun == null)
+            {
+                return;
+            }
+
+            var bloom = root.GetComponent<SunBloomEffect>();
+            if (bloom == null)
+            {
+                bloom = root.gameObject.AddComponent<SunBloomEffect>();
+            }
+
+            bloom.Initialize(sun);
+        }
+
         private Light CreateDirectionalSunLight()
         {
             GameObject lightObject = new GameObject("Solar Directional Light");
@@ -127,10 +196,11 @@ namespace SolarSystemExplorer.Runtime
             lightComponent.enabled = true;
         }
 
-        private void CreateLightController(Transform gameObject, Transform star, Transform planet, Light sun)
+        private StarDirectionalLightController CreateLightController(Transform gameObject, Transform star, Transform planet, Light sun)
         {
             StarDirectionalLightController controller = gameObject.gameObject.AddComponent<StarDirectionalLightController>();
             controller.Initialize(star, planet, sun);
+            return controller;
         }
     }
 }

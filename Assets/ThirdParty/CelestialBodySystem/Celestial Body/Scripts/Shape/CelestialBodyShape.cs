@@ -1,6 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
 public abstract class CelestialBodyShape : ScriptableObject {
 
@@ -17,6 +15,12 @@ public abstract class CelestialBodyShape : ScriptableObject {
 
 	ComputeBuffer heightBuffer;
 
+	public virtual bool SupportsCpuGeneration {
+		get {
+			return false;
+		}
+	}
+
 	public virtual float[] CalculateHeights (ComputeBuffer vertexBuffer) {
 		//Debug.Log (System.Environment.StackTrace);
 		// Set data
@@ -32,6 +36,22 @@ public abstract class CelestialBodyShape : ScriptableObject {
 		var heights = new float[vertexBuffer.count];
 		heightBuffer.GetData (heights);
 		return heights;
+	}
+
+	public virtual float[] CalculateHeightsCpu (Vector3[] vertices) {
+		var heights = new float[vertices.Length];
+		CalculateHeightsCpu (vertices, heights);
+		return heights;
+	}
+
+	public virtual void CalculateHeightsCpu (Vector3[] vertices, float[] heights) {
+		for (int i = 0; i < heights.Length; i++) {
+			heights[i] = 1;
+		}
+	}
+
+	public virtual bool PerturbVerticesCpu (Vector3[] vertices, float maxPerturbStrength) {
+		return false;
 	}
 
 	public virtual void ReleaseBuffers () {

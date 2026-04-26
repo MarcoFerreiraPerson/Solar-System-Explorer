@@ -56,7 +56,9 @@ public class CelestialBodyGenerator : MonoBehaviour {
 	// • doesn't support updating of shape/shading values once generated
 	void HandleGameModeGeneration () {
 		if (CanGenerateMesh ()) {
-			Dummy ();
+			if (UseComputeGeneration) {
+				Dummy ();
+			}
 
 			// Generate LOD meshes
 			lodMeshes = new Mesh[ResolutionSettings.numLODLevels];
@@ -110,7 +112,9 @@ public class CelestialBodyGenerator : MonoBehaviour {
 			if (shapeSettingsUpdated) {
 				shapeSettingsUpdated = false;
 				shadingNoiseSettingsUpdated = false;
-				Dummy ();
+				if (UseComputeGeneration) {
+					Dummy ();
+				}
 
 				var terrainMeshTimer = System.Diagnostics.Stopwatch.StartNew ();
 				heightMinMax = GenerateTerrainMesh (ref previewMesh, PickTerrainRes ());
@@ -121,9 +125,14 @@ public class CelestialBodyGenerator : MonoBehaviour {
 			// If only shading noise has changed, update it separately from shape to save time
 			else if (shadingNoiseSettingsUpdated) {
 				shadingNoiseSettingsUpdated = false;
-				ComputeHelper.CreateStructuredBuffer<Vector3> (ref vertexBuffer, previewMesh.vertices);
 				body.shading.Initialize (body.shape);
-				Vector4[] shadingData = body.shading.GenerateShadingData (vertexBuffer);
+				Vector4[] shadingData;
+				if (UseComputeGeneration) {
+					ComputeHelper.CreateStructuredBuffer<Vector3> (ref vertexBuffer, previewMesh.vertices);
+					shadingData = body.shading.GenerateShadingData (vertexBuffer);
+				} else {
+					shadingData = body.shading.GenerateShadingDataCpu (previewMesh.vertices);
+				}
 				previewMesh.SetUVs (0, shadingData);
 
 				// Sometimes when changing a colour property, invalid data is returned from compute shader
@@ -199,25 +208,35 @@ public class CelestialBodyGenerator : MonoBehaviour {
 	// Returns the min/max height of the terrain
 	Vector2 GenerateTerrainMesh (ref Mesh mesh, int resolution) {
 		var (vertices, triangles) = CreateSphereVertsAndTris (resolution);
-		ComputeHelper.CreateStructuredBuffer<Vector3> (ref vertexBuffer, vertices);
-
 		float edgeLength = (vertices[triangles[0]] - vertices[triangles[1]]).magnitude;
+		Vector3[] shadingVertices;
 
-		// Set heights
-		float[] heights = body.shape.CalculateHeights (vertexBuffer);
+		float[] heights;
+		if (UseComputeGeneration) {
+			ComputeHelper.CreateStructuredBuffer<Vector3> (ref vertexBuffer, vertices);
+			heights = body.shape.CalculateHeights (vertexBuffer);
 
-		// Perturb vertices to give terrain a less perfectly smooth appearance
-		if (body.shape.perturbVertices && body.shape.perturbCompute) {
-			ComputeShader perturbShader = body.shape.perturbCompute;
-			float maxperturbStrength = body.shape.perturbStrength * edgeLength / 2;
+			if (body.shape.perturbVertices && body.shape.perturbCompute) {
+				ComputeShader perturbShader = body.shape.perturbCompute;
+				float maxperturbStrength = body.shape.perturbStrength * edgeLength / 2;
 
-			perturbShader.SetBuffer (0, "points", vertexBuffer);
-			perturbShader.SetInt ("numPoints", vertices.Length);
-			perturbShader.SetFloat ("maxStrength", maxperturbStrength);
+				perturbShader.SetBuffer (0, "points", vertexBuffer);
+				perturbShader.SetInt ("numPoints", vertices.Length);
+				perturbShader.SetFloat ("maxStrength", maxperturbStrength);
 
-			ComputeHelper.Run (perturbShader, vertices.Length);
-			Vector3[] pertData = new Vector3[vertices.Length];
-			vertexBuffer.GetData (vertices);
+				ComputeHelper.Run (perturbShader, vertices.Length);
+				vertexBuffer.GetData (vertices);
+			}
+			shadingVertices = new Vector3[vertices.Length];
+			System.Array.Copy (vertices, shadingVertices, vertices.Length);
+		} else {
+			heights = body.shape.CalculateHeightsCpu (vertices);
+			if (body.shape.perturbVertices) {
+				float maxperturbStrength = body.shape.perturbStrength * edgeLength / 2;
+				body.shape.PerturbVerticesCpu (vertices, maxperturbStrength);
+			}
+			shadingVertices = new Vector3[vertices.Length];
+			System.Array.Copy (vertices, shadingVertices, vertices.Length);
 		}
 
 		// Calculate terrain min/max height and set heights of vertices
@@ -238,7 +257,9 @@ public class CelestialBodyGenerator : MonoBehaviour {
 
 		// Shading noise data
 		body.shading.Initialize (body.shape);
-		Vector4[] shadingData = body.shading.GenerateShadingData (vertexBuffer);
+		Vector4[] shadingData = UseComputeGeneration
+			? body.shading.GenerateShadingData (vertexBuffer)
+			: body.shading.GenerateShadingDataCpu (shadingVertices);
 		mesh.SetUVs (0, shadingData);
 
 		// Create crude tangents (vectors perpendicular to surface normal)
@@ -257,10 +278,13 @@ public class CelestialBodyGenerator : MonoBehaviour {
 
 	void GenerateCollisionMesh (int resolution) {
 		var (vertices, triangles) = CreateSphereVertsAndTris (resolution);
-		ComputeHelper.CreateStructuredBuffer<Vector3> (ref vertexBuffer, vertices);
-
-		// Set heights
-		float[] heights = body.shape.CalculateHeights (vertexBuffer);
+		float[] heights;
+		if (UseComputeGeneration) {
+			ComputeHelper.CreateStructuredBuffer<Vector3> (ref vertexBuffer, vertices);
+			heights = body.shape.CalculateHeights (vertexBuffer);
+		} else {
+			heights = body.shape.CalculateHeightsCpu (vertices);
+		}
 		for (int i = 0; i < vertices.Length; i++) {
 			float height = heights[i];
 			vertices[i] *= height;
@@ -390,7 +414,25 @@ public class CelestialBodyGenerator : MonoBehaviour {
 	}
 
 	bool CanGenerateMesh () {
-		return ComputeHelper.CanRunEditModeCompute && body.shape && body.shape.heightMapCompute;
+		if (!body || !body.shape || !body.shading) {
+			return false;
+		}
+
+		if (!ComputeHelper.CanRunEditModeCompute) {
+			return false;
+		}
+
+		if (UseComputeGeneration) {
+			return body.shape.heightMapCompute;
+		}
+
+		return body.shape.SupportsCpuGeneration && body.shading.SupportsCpuGeneration;
+	}
+
+	bool UseComputeGeneration {
+		get {
+			return ComputeHelper.SupportsCompute;
+		}
 	}
 
 	void LogTimer (System.Diagnostics.Stopwatch sw, string text) {

@@ -12,7 +12,7 @@ Shader "SolarSystemExplorer/PlanetOceanURP"
     SubShader
     {
         Tags { "RenderType"="Transparent" "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" }
-        LOD 200
+        LOD 100
 
         Pass
         {
@@ -25,8 +25,6 @@ Shader "SolarSystemExplorer/PlanetOceanURP"
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS
-            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile_fog
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
@@ -77,7 +75,7 @@ Shader "SolarSystemExplorer/PlanetOceanURP"
                 float3 albedo = lerp(_DeepColor.rgb, _ShallowColor.rgb, saturate(horizon + fresnel * 0.5));
 
                 float NdotL = saturate(dot(normalWS, mainLight.direction));
-                float3 diffuse = albedo * (0.2 + NdotL * mainLight.shadowAttenuation);
+                float3 diffuse = albedo * (0.2 + NdotL);
                 float3 halfDir = normalize(mainLight.direction + viewDir);
                 float specular = pow(saturate(dot(normalWS, halfDir)), lerp(16.0, 96.0, _Smoothness));
                 float3 color = diffuse + mainLight.color * specular * _Smoothness;
