@@ -30,6 +30,7 @@ namespace SolarSystemExplorer.Runtime
             player = new Player(earthStartPlanet);
             spaceShip = new SpaceShip(earthStartPlanet, player);
             Light sunLight = CreateDirectionalSunLight();
+            ConfigureSunBloom(t, star);
             lightController = CreateLightController(t, star.transform, activePlanet.Transform, sunLight);
         }
 
@@ -154,6 +155,22 @@ namespace SolarSystemExplorer.Runtime
             }
 
             return shader == null ? null : new Material(shader);
+        }
+
+        private static void ConfigureSunBloom(Transform root, GameObject sun)
+        {
+            if (root == null || sun == null)
+            {
+                return;
+            }
+
+            var bloom = root.GetComponent<SunBloomEffect>();
+            if (bloom == null)
+            {
+                bloom = root.gameObject.AddComponent<SunBloomEffect>();
+            }
+
+            bloom.Initialize(sun);
         }
 
         private Light CreateDirectionalSunLight()

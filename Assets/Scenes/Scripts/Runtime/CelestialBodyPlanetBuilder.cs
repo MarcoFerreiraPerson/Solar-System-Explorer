@@ -259,6 +259,7 @@ namespace SolarSystemExplorer.Runtime
             }
 
             EnsureOceanSphere(generator);
+            EnsureEarthAtmosphere(maxR, oceanLevel);
             applied = true;
         }
 
@@ -343,6 +344,28 @@ namespace SolarSystemExplorer.Runtime
             oceanRenderer.sharedMaterial = oceanMaterial;
             oceanRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             oceanRenderer.receiveShadows = false;
+        }
+
+        private void EnsureEarthAtmosphere(float terrainRadius, float oceanRadius)
+        {
+            if (profile == null || !string.Equals(profile.Name, PlanetCatalog.Earth.Name, System.StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            float baseRadius = Mathf.Max(terrainRadius, oceanRadius);
+            if (baseRadius <= 0f)
+            {
+                return;
+            }
+
+            var atmosphere = GetComponent<EarthAtmosphereShell>();
+            if (atmosphere == null)
+            {
+                atmosphere = gameObject.AddComponent<EarthAtmosphereShell>();
+            }
+
+            atmosphere.Build(baseRadius);
         }
 
         private void OnDestroy()
