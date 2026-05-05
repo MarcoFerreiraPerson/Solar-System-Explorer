@@ -53,6 +53,10 @@ namespace SolarSystemExplorer.Runtime
         public TerrainPalette TerrainPalette { get; }
         public OceanPalette OceanColors { get; }
         public float Radius => Diameter * 0.5f;
+        public float ScaledDiameter => Diameter * PlanetCatalog.SystemScale;
+        public float ScaledRadius => Radius * PlanetCatalog.SystemScale;
+        public float ScaledOrbitRadius => OrbitRadius * PlanetCatalog.SystemScale;
+        public float ScaledOrbitBand => OrbitBand * PlanetCatalog.SystemScale;
 
         public PlanetProfile(
             string name,
@@ -91,6 +95,9 @@ namespace SolarSystemExplorer.Runtime
 
     public static class PlanetCatalog
     {
+        public const float SystemScale = 5f;
+        public const float AxialRotationScale = 0.25f;
+
         public static readonly IReadOnlyList<PlanetProfile> All = new[]
         {
             new PlanetProfile(

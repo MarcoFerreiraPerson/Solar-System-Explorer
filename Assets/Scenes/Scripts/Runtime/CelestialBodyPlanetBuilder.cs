@@ -169,7 +169,7 @@ namespace SolarSystemExplorer.Runtime
             }
 
             var planet = new GameObject(profile.Name);
-            planet.transform.localScale = Vector3.one * profile.Radius;
+            planet.transform.localScale = Vector3.one * profile.ScaledRadius;
 
             var generator = planet.AddComponent<CelestialBodyGenerator>();
             generator.body = runtimeAssets.Settings;

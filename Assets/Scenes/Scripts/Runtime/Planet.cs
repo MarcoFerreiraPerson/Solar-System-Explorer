@@ -10,7 +10,7 @@ namespace SolarSystemExplorer.Runtime
 
         public PlanetProfile Profile { get; }
         public Transform Transform => planet != null ? planet.transform : null;
-        public float Radius => Profile.Radius;
+        public float Radius => Profile.ScaledRadius;
 
         public GameObject getPlanet()
         {
@@ -19,7 +19,7 @@ namespace SolarSystemExplorer.Runtime
 
         public float getPlanetDiameter()
         {
-            return Profile.Diameter;
+            return Profile.ScaledDiameter;
         }
 
         public Planet(PlanetProfile profile, Transform starTransform, float orbitAttractorMass, float orbitGravityConstant)
@@ -30,7 +30,7 @@ namespace SolarSystemExplorer.Runtime
             {
                 planet = GameObject.CreatePrimitive(PrimitiveType.Sphere);
                 planet.name = $"{profile.Name} (fallback)";
-                planet.transform.localScale = Vector3.one * profile.Diameter;
+                planet.transform.localScale = Vector3.one * profile.ScaledDiameter;
             }
 
             planet.name = profile.Name;
@@ -40,7 +40,7 @@ namespace SolarSystemExplorer.Runtime
             ConfigurePlanetOrbit(orbit, profile, starTransform, orbitAttractorMass, orbitGravityConstant);
 
             var spinner = planet.AddComponent<AxialSpinner>();
-            spinner.Configure(Vector3.up, profile.AxialSpinDegPerSec);
+            spinner.Configure(Vector3.up, profile.AxialSpinDegPerSec * PlanetCatalog.AxialRotationScale);
         }
 
         public float GetSurfaceDistance(Vector3 position)
@@ -56,7 +56,7 @@ namespace SolarSystemExplorer.Runtime
         private static Vector3 CalculateStartingPosition(PlanetProfile profile)
         {
             Quaternion orbitRotation = Quaternion.AngleAxis(profile.InitialOrbitAngleDeg, Vector3.up);
-            return orbitRotation * Vector3.right * profile.OrbitRadius;
+            return orbitRotation * Vector3.right * profile.ScaledOrbitRadius;
         }
 
         private static void ConfigurePlanetOrbit(
@@ -71,8 +71,8 @@ namespace SolarSystemExplorer.Runtime
                 return;
             }
 
-            float minOrbitRadius = Mathf.Max(200f, profile.OrbitRadius - profile.OrbitBand);
-            float maxOrbitRadius = profile.OrbitRadius + profile.OrbitBand;
+            float minOrbitRadius = Mathf.Max(200f, profile.ScaledOrbitRadius - profile.ScaledOrbitBand);
+            float maxOrbitRadius = profile.ScaledOrbitRadius + profile.ScaledOrbitBand;
             orbit.ConfigureOrbit(
                 starTransform,
                 orbitGravityConstant,

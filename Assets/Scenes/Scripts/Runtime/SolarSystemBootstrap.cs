@@ -1,14 +1,18 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 using System.Collections.Generic;
+using TMPro;
 
 namespace SolarSystemExplorer.Runtime
 {
     public class SolarSystemBootstrap
     {
         private const float StarDiameter = 600f;
+        private const float SunScale = 6f;
         private const float OrbitGravityConstant = 1f;
         private const float OrbitAttractorMass = 2200000f;
+        private const string ObjectiveTextName = "Objective Text";
+        private const string ObjectiveTextValue = "Explore the solar system!";
 
         private readonly List<Planet> planets = new List<Planet>();
         private Planet activePlanet;
@@ -31,6 +35,7 @@ namespace SolarSystemExplorer.Runtime
             spaceShip = new SpaceShip(earthStartPlanet, player);
             Light sunLight = CreateDirectionalSunLight();
             ConfigureSunBloom(t, star);
+            CreateObjectiveText();
             lightController = CreateLightController(t, star.transform, activePlanet.Transform, sunLight);
         }
 
@@ -116,7 +121,7 @@ namespace SolarSystemExplorer.Runtime
             GameObject star = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             star.name = "Star";
             star.transform.position = Vector3.zero;
-            star.transform.localScale = Vector3.one * StarDiameter;
+            star.transform.localScale = Vector3.one * StarDiameter * SunScale;
 
             Renderer renderer = star.GetComponent<Renderer>();
             if (renderer != null)
@@ -133,6 +138,45 @@ namespace SolarSystemExplorer.Runtime
             }
 
             return star;
+        }
+
+        private static void CreateObjectiveText()
+        {
+            GameObject canvasObject = GameObject.Find("Canvas");
+            if (canvasObject == null)
+            {
+                return;
+            }
+
+            Transform existing = canvasObject.transform.Find(ObjectiveTextName);
+            GameObject textObject = existing != null ? existing.gameObject : new GameObject(ObjectiveTextName);
+            textObject.layer = canvasObject.layer;
+            textObject.transform.SetParent(canvasObject.transform, false);
+
+            RectTransform rect = textObject.GetComponent<RectTransform>();
+            if (rect == null)
+            {
+                rect = textObject.AddComponent<RectTransform>();
+            }
+
+            rect.anchorMin = new Vector2(1f, 1f);
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(1f, 1f);
+            rect.anchoredPosition = new Vector2(-24f, -24f);
+            rect.sizeDelta = new Vector2(360f, 40f);
+
+            TextMeshProUGUI text = textObject.GetComponent<TextMeshProUGUI>();
+            if (text == null)
+            {
+                text = textObject.AddComponent<TextMeshProUGUI>();
+            }
+
+            text.text = ObjectiveTextValue;
+            text.color = Color.white;
+            text.fontSize = 24f;
+            text.alignment = TextAlignmentOptions.TopRight;
+            text.textWrappingMode = TextWrappingModes.NoWrap;
+            text.raycastTarget = false;
         }
 
         private static Material CreateUnlitMaterial()
